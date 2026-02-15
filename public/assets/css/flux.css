@@ -107,6 +107,7 @@ body {
     background-color: rgba(56, 139, 253, 0.1);
     border-left-color: var(--flux-info);
     color: var(--flux-text);
+    border-radius: 4px;
 }
 
 .flux-step-name {
@@ -237,4 +238,70 @@ body {
     border: 1px solid var(--flux-border);
     border-radius: 6px;
     padding: 4px 8px;
+}
+
+/* Drop Zone */
+.flux-dropzone {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed var(--flux-border);
+    margin: 20px;
+    border-radius: 12px;
+    background-color: var(--flux-bg);
+    transition: all 0.2s;
+}
+
+.flux-dropzone.highlight {
+    border-color: var(--flux-ansi-blue);
+    background-color: rgba(56, 139, 253, 0.05);
+}
+
+.dropzone-content {
+    text-align: center;
+}
+
+.dropzone-content h1 {
+    font-size: 24px;
+    margin-bottom: 12px;
+}
+
+.dropzone-content p {
+    color: var(--flux-text-muted);
+    margin-bottom: 24px;
+}
+
+.dropzone-content button {
+    background-color: var(--flux-ansi-blue);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.dropzone-content button:hover {
+    opacity: 0.9;
+}
+
+/* Scrollbar Polish */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--flux-border);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--flux-text-muted);
 }

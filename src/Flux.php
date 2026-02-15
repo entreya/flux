@@ -24,14 +24,33 @@ class Flux
     private ThemeManager $themeManager;
     private AuthManager $authManager;
     private RateLimiter $rateLimiter;
+    private array $globalEnv;
 
     public function __construct(array $config = [])
     {
-        // 1. Dependency Injection Wiring
+        // 1. Environment Setup
+        $phpDir = dirname(PHP_BINARY);
+        $path = getenv('PATH') ?: '/usr/bin:/bin';
+        $fullPath = $phpDir . PATH_SEPARATOR . $path;
+        
+        $baseEnv = [
+            'PATH' => $fullPath,
+            'PHP_BINARY' => PHP_BINARY,
+            'ANSIBLE_FORCE_COLOR' => '1',
+            'TERM' => 'xterm-256color', // Help tools detect TTY-like capability
+        ];
+
+        // Merge user config env if any
+        $configEnv = $config['env'] ?? [];
+        $this->globalEnv = array_merge($baseEnv, $configEnv);
+
+        // 2. Dependency Injection Wiring
         $validator = new CommandValidator($config['security'] ?? []);
         $runner = new CommandRunner($validator, $config['timeout'] ?? 300);
-        $parser = new YamlParser();
-        $this->executor = new WorkflowExecutor($runner, $parser);
+        $parser = new YamlParser(); // YamlParser doesn't need env
+        
+        // Pass globalEnv to Executor?
+        $this->executor = new WorkflowExecutor($runner, $parser, $this->globalEnv);
         
         $this->formatter = new OutputFormatter(new AnsiConverter());
         $this->themeManager = new ThemeManager($config['theme']['custom_dir'] ?? null);

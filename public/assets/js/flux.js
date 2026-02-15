@@ -26,6 +26,71 @@ class FluxApp {
 
         this.setupSSE();
         this.setupTheme();
+        this.setupDragDrop();
+    }
+
+
+    setupDragDrop() {
+        const dropzone = document.getElementById('flux-dropzone');
+        if (!dropzone) return;
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.add('highlight'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.remove('highlight'), false);
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            this.handleFiles(files);
+        });
+
+        const input = document.getElementById('file-upload');
+        if (input) {
+            input.addEventListener('change', () => this.handleFiles(input.files));
+        }
+    }
+
+    handleFiles(files) {
+        if (files.length > 0) {
+            this.uploadFile(files[0]);
+        }
+    }
+
+    uploadFile(file) {
+        const url = '?action=upload';
+        const formData = new FormData();
+        formData.append('workflow_file', file);
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.file) {
+                    window.location.href = '?workflow=' + encodeURIComponent(data.file);
+                } else {
+                    alert('Upload failed: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Upload error');
+            });
     }
 
     setTheme(theme) {

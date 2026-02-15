@@ -12,11 +12,13 @@ class WorkflowExecutor
 {
     private CommandRunner $runner;
     private YamlParser $parser;
+    private array $globalEnv;
 
-    public function __construct(CommandRunner $runner, YamlParser $parser)
+    public function __construct(CommandRunner $runner, YamlParser $parser, array $globalEnv = [])
     {
         $this->runner = $runner;
         $this->parser = $parser;
+        $this->globalEnv = $globalEnv;
     }
 
     /**
@@ -67,9 +69,13 @@ class WorkflowExecutor
             foreach ($steps as $index => $step) {
                 $stepName = $step['name'] ?? "Step #".($index+1);
                 $command = $step['run'] ?? null;
-                $env = $step['env'] ?? []; // Job ENV support too?
-                // Merge Job Env + Step Env
-                // $jobEnv = $job['env'] ?? [];
+                
+                // Merge Envs: Global -> Job -> Step
+                $stepEnv = $step['env'] ?? []; 
+                $jobEnv = $job['env'] ?? [];
+                
+                // Priority: Step > Job > Global
+                $finalEnv = array_merge($this->globalEnv, $jobEnv, $stepEnv);
                 
                 if (!$command) {
                     // Could be a 'uses' action (not supported yet)
@@ -93,7 +99,7 @@ class WorkflowExecutor
                          'content' => "> $command"
                     ]];
 
-                    foreach ($this->runner->execute($command, null, $env) as $output) {
+                    foreach ($this->runner->execute($command, null, $finalEnv) as $output) {
                          yield ['event' => 'log', 'data' => [
                              'job' => $jobId,
                              'step' => $index,

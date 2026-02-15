@@ -18,9 +18,9 @@ class OutputFormatter
      */
     public function formatLog(array $event): string
     {
-        // Convert content ANSI -> HTML
+        // Convert ANSI -> HTML for logs
         if (isset($event['data']['content'])) {
-            $event['data']['html'] = $this->ansiConverter->convert($event['data']['content']);
+            $event['data']['content'] = $this->ansiConverter->convert($event['data']['content']);
         }
         return $this->formatEvent($event['event'], $event['data']);
     }

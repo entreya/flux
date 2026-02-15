@@ -1,0 +1,5 @@
+name: Ansible ANSI Test
+jobs:
+  test_ansible:
+    steps:
+      - run: php test_ansible.php

@@ -20,3 +20,11 @@ All notable changes to this project will be documented in this file.
 - **Security**: Updated `complex-workflow.yaml` to remove chaining operators (`&&`) in compliance with strict validator rules.
 - **Rendering**: Fixed ANSI color rendering in browser logs.
 - **Stability**: Resolved infinite reconnection loops in SSE client when rate limited.
+- **Compatibility**: Patched SSE logic to support PHP 8.2 (dynamic properties).
+- **Paths**: Resolved path resolution issues for example workflows.
+
+### Added (v2 Polish)
+- **UI**: Added Drag-and-Drop support for workflow files with polished Dropzone.
+- **Security**: Added backend request rate limiting (default 1000/hr).
+- **Execution**: Injected PHP binary path into environment for robust execution.
+- **Style**: Polished UI with rounded corners and scrollbar styling.

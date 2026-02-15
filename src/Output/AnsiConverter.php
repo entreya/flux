@@ -49,30 +49,10 @@ class AnsiConverter
     {
         $text = htmlspecialchars($text, ENT_NOQUOTES, 'UTF-8');
 
-        // Pattern to match ANSI escape codes: \x1b, \033, or \e followed by [...m
-        // Examples: \x1b[31m, \033[31m, \e[31m
-        $pattern = '/(?:\x1b|\\\\033|\\\\e)\[([0-9;]*?)m/';
+        // Pattern to match ANSI escape codes: \x1b, \033, or \e followed by [... and a letter
+        // Supports m (SGR) and K (Erase in Line)
+        $pattern = '/(?:\x1b|\\\\033|\\\\e)\[([0-9;]*?)([a-zA-Z])/';
 
-        $result = '';
-        $offset = 0;
-        $activeStyles = []; // Stack of active <span> tags? No, flat list of styles.
-        // Actually, reliable ANSI handling usually requires a state machine.
-        // For simplicity: We will use a regex callback replacement that wraps content in spans.
-        // But ANSI effectively toggles state.
-        
-        // Strategy: Split by ANSI codes.
-        $parts = preg_split($pattern, $text, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_OFFSET_CAPTURE);
-        
-        // First part is always text before any code (or empty)
-        $result .= $parts[0][0]; 
-        
-        // Subsequent parts alternate between [code_captured_group, offset] and [next_text, offset] if we didn't use capturing group.
-        // With PREG_SPLIT_DELIM_CAPTURE, parts are: text, delimiter_match, text, delimiter_match...
-        
-        // Let's retry simpler approach:
-        // Iterate through string, maintain current style state.
-        
-        // Re-split using correct logic
         preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE);
         
         if (count($matches[0]) === 0) {
@@ -86,7 +66,8 @@ class AnsiConverter
         foreach ($matches[0] as $i => $fullMatch) {
             $matchStr = $fullMatch[0];
             $matchOffset = $fullMatch[1];
-            $codesStr = $matches[1][$i][0]; // "31" or "1;31" or ""
+            $paramsStr = $matches[1][$i][0]; // Parameters (e.g. "31;1")
+            $command = $matches[2][$i][0];   // Command (e.g. "m", "K")
             
             // Append text before this code
             $segment = substr($text, $lastOffset, $matchOffset - $lastOffset);
@@ -94,29 +75,31 @@ class AnsiConverter
                 $html .= $this->wrap($segment, $currentStyles);
             }
             
-            // Update state
-            $codes = $codesStr === '' ? [] : explode(';', $codesStr);
-            if (empty($codes) || $codes === ['0']) {
-                $currentStyles = [];
-            } else {
-                foreach ($codes as $code) {
-                    $c = (int)$code;
-                    if ($c === 0) {
-                        $currentStyles = [];
-                    } elseif (isset(self::COLORS[$c]) || isset(self::STYLES[$c])) {
-                       // If color (30-37, 90-97), remove existing color first? 
-                       // Usually ANSI replaces color.
-                       if (($c >= 30 && $c <= 37) || ($c >= 90 && $c <= 97)) {
-                            // Remove any existing fg color
-                            $currentStyles = array_filter($currentStyles, fn($k) => !($k >= 30 && $k <= 37) && !($k >= 90 && $k <= 97), ARRAY_FILTER_USE_KEY);
-                       }
-                       if ($c >= 40 && $c <= 47) {
-                            // Remove existing bg color
-                            $currentStyles = array_filter($currentStyles, fn($k) => !($k >= 40 && $k <= 47), ARRAY_FILTER_USE_KEY);
-                       }
-                       $currentStyles[$c] = true;
+            // Handle Command
+            if ($command === 'm') {
+                // SGR - Select Graphic Rendition
+                $codes = $paramsStr === '' ? [] : explode(';', $paramsStr);
+                if (empty($codes)) {
+                    $currentStyles = []; // Reset
+                } else {
+                    foreach ($codes as $code) {
+                        $c = (int)$code;
+                        if ($c === 0) {
+                            $currentStyles = [];
+                        } elseif (isset(self::COLORS[$c]) || isset(self::STYLES[$c])) {
+                           if (($c >= 30 && $c <= 37) || ($c >= 90 && $c <= 97)) {
+                                $currentStyles = array_filter($currentStyles, fn($k) => !($k >= 30 && $k <= 37) && !($k >= 90 && $k <= 97), ARRAY_FILTER_USE_KEY);
+                           }
+                           if ($c >= 40 && $c <= 47) {
+                                $currentStyles = array_filter($currentStyles, fn($k) => !($k >= 40 && $k <= 47), ARRAY_FILTER_USE_KEY);
+                           }
+                           $currentStyles[$c] = true;
+                        }
                     }
                 }
+            } elseif ($command === 'K') {
+                // Erase in Line - Ignore for now (strip)
+                // TODO: Implement graphical line clearing if needed
             }
             
             $lastOffset = $matchOffset + strlen($matchStr);
