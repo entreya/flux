@@ -1,0 +1,20 @@
+name: Basic Build Pipeline
+description: A simple example workflow demonstration
+steps:
+  - name: Environment Check
+    run: php -v
+  
+  - name: Start Install
+    run: echo "Installing dependencies..."
+    
+  - name: Wait for Install (Simulated)
+    run: sleep 1
+    
+  - name: Finish Install
+    run: echo "Done."
+    
+  - name: Run Tests
+    run: echo "Running Unit Tests..."
+
+  - name: Build JS
+    run: echo "Building JS..."

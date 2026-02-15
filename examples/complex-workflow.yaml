@@ -1,0 +1,58 @@
+name: Complex CI Pipeline
+description: Demonstrates jobs, dependencies and parallel structure imitation
+
+jobs:
+  lint:
+    name: Lint & Static Analysis
+    steps:
+      - name: Checkout Code
+        run: echo "Checking out code..."
+      - name: Delay Checkout
+        run: sleep 1
+      - name: PHP CS Fixer
+        run: echo "Running PHP CS Fixer..."
+      - name: CS Fixer Delay
+        run: sleep 2
+      - name: CS Fixer Success
+        run: echo "Style ok."
+      - name: PHPStan
+        run: echo "Running PHPStan..."
+      - name: PHPStan Delay
+        run: sleep 2
+      - name: PHPStan Complete
+        run: echo "Analysis complete."
+
+  test:
+    name: Unit Tests
+    needs: lint
+    steps:
+      - name: Bootstrap
+        run: echo "Bootstrapping test env..."
+      - name: Bootstrap Delay
+        run: sleep 1
+      - name: PHPUnit Suite 1
+        run: |
+           echo "Running Suite 1..."
+           echo "Test A: \033[32mPASS\033[0m"
+           echo "Test B: \033[32mPASS\033[0m"
+           sleep 2
+      - name: PHPUnit Suite 2
+        run: |
+           echo "Running Suite 2..."
+           echo "Test C: \033[32mPASS\033[0m"
+           sleep 1
+
+  build:
+    name: Build Artifacts
+    needs: test
+    steps:
+      - name: Npm Install
+        run: echo "npm install"
+      - name: Npm Delay
+        run: sleep 2
+      - name: Webpack Build
+        run: |
+           echo "Compiling assets..."
+           sleep 1
+           echo "736 modules transformed."
+           echo "\033[32mBuild Success!\033[0m"
