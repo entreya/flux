@@ -6,48 +6,52 @@ namespace Entreya\Flux\Security;
 
 use Entreya\Flux\Exceptions\SecurityException;
 
+/**
+ * Validates commands before execution.
+ *
+ * Key design decisions vs. previous version:
+ *  - Multi-line scripts (containing \n) skip the single-command allowlist check
+ *    because they are wrapped in a bash script by CommandRunner and can legitimately
+ *    contain pipes, redirects, conditionals, etc.
+ *  - The blocked-patterns list is applied to the full script text in all cases.
+ *  - Single-line commands still go through the allowlist.
+ *  - The allowlist is fully configurable and open by default (empty = allow all).
+ */
 class CommandValidator
 {
     private array $allowedCommands;
     private array $blockedPatterns;
+    private bool  $useAllowlist;
 
     public function __construct(array $config = [])
     {
-        // Default whitelist (Extended based on user request)
-        $this->allowedCommands = $config['allowed_commands'] ?? [
-            'composer', 'npm', 'yarn', 'git', 'php', 'phpunit', 'node', 'python3', 'pytest', 
-            'make', 'echo', 'ls', 'pwd', 'sleep'
-        ];
+        // If 'allowed_commands' is explicitly set, enforce allowlist; otherwise open.
+        $this->useAllowlist    = isset($config['allowed_commands']);
+        $this->allowedCommands = $config['allowed_commands'] ?? [];
 
-        // Default dangerous patterns (Extended)
         $this->blockedPatterns = $config['blocked_patterns'] ?? [
-            '/rm\s+-rf/i',
-            '/rm\s+\-/i',
-            '/sudo/i',
-            '/su\s/i',
-            '/passwd/i',
-            '/shutdown/i',
-            '/reboot/i',
-            '/halt/i',
-            '/init\s/i',
-            '/kill/i',
-            '/pkill/i',
-            '/;/i',      // Chaining
-            '/&&/i',     // Chaining
-            '/\|\|/i',   // Chaining
-            '/\|/',      // Pipe
-            '/`/',       // Backticks
-            '/\$\(/',    // Command substitution
-            '/>\s*\//',  // Redirect to absolute path
-            '/>\s*>/',   // Append redirect
-            '/chmod/i',
-            '/chown/i',
-            '/curl/i',
-            '/wget/i',
-            '/mkfs/i',
-            '/dd/i',
-            '/eval/i',
-            '/exec/i',
+            // Destructive filesystem ops
+            '/\brm\s+-[rf]/i',
+            '/\bmkfs\b/i',
+            '/\bdd\s+if=/i',
+            '/\bshred\b/i',
+
+            // Privilege escalation
+            '/\bsudo\b/i',
+            '/\bsu\s/i',
+            '/\bpasswd\b/i',
+            '/\bchmod\s+[0-7]*7[0-7]{2}\b/i',
+
+            // System control
+            '/\b(shutdown|reboot|halt|poweroff|init\s)\b/i',
+
+            // Command injection via eval/exec (PHP-level)
+            '/\beval\s*\(/i',
+
+            // Dangerous redirects into system dirs
+            '/>\/etc\//i',
+            '/>\/boot\//i',
+            '/>\/sys\//i',
         ];
     }
 
@@ -57,32 +61,35 @@ class CommandValidator
     public function validate(string $command): void
     {
         $command = trim($command);
+
         if ($command === '') {
             return;
         }
 
-        // 1. Check blocked patterns
+        // 1. Always check blocked patterns (applies to single-line and scripts)
         foreach ($this->blockedPatterns as $pattern) {
             if (preg_match($pattern, $command)) {
-                throw new SecurityException("Security Violation: Command contains restricted pattern: $pattern");
+                throw new SecurityException(
+                    "Security violation: command matches blocked pattern."
+                );
             }
         }
 
-        // 2. Extract base command (first word)
-        $parts = explode(' ', $command);
-        $baseCommand = $parts[0];
-        
-        // Handle path-based commands e.g. "./vendor/bin/phpunit" -> "phpunit"
-        $baseName = basename($baseCommand);
-
-        // 3. Check whitelist
-        if (!in_array($baseName, $this->allowedCommands, true)) {
-            throw new SecurityException("Security Violation: Command '$baseName' is not in the allowlist.");
+        // 2. For multi-line scripts, skip allowlist — they are bash scripts
+        //    and can reasonably contain pipes, ifs, loops, etc.
+        if (str_contains($command, "\n")) {
+            return;
         }
-    }
 
-    public function sanitize(string $input): string
-    {
-        return escapeshellcmd($input);
+        // 3. For single-line commands, optionally enforce allowlist
+        if ($this->useAllowlist && !empty($this->allowedCommands)) {
+            $baseName = basename(explode(' ', $command)[0]);
+
+            if (!in_array($baseName, $this->allowedCommands, strict: true)) {
+                throw new SecurityException(
+                    "Security violation: '$baseName' is not in the allowed commands list."
+                );
+            }
+        }
     }
 }

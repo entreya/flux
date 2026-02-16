@@ -4,136 +4,188 @@ declare(strict_types=1);
 
 namespace Entreya\Flux\Output;
 
+/**
+ * Converts ANSI escape sequences to HTML <span> elements with CSS variables.
+ *
+ * Supports:
+ *  - SGR color codes (30-37, 40-47, 90-97, 100-107)
+ *  - Bold (1), italic (3), underline (4), dim (2)
+ *  - Reset (0 / ESC[m)
+ *  - 256-color foreground (38;5;n) and background (48;5;n)
+ *  - Erase in Line K sequences (stripped)
+ *  - Carriage return handling (overwrites line)
+ */
 class AnsiConverter
 {
-    private const COLORS = [
-        // Text Colors
-        30 => 'color: var(--flux-ansi-black);',
-        31 => 'color: var(--flux-ansi-red);',
-        32 => 'color: var(--flux-ansi-green);',
-        33 => 'color: var(--flux-ansi-yellow);',
-        34 => 'color: var(--flux-ansi-blue);',
-        35 => 'color: var(--flux-ansi-magenta);',
-        36 => 'color: var(--flux-ansi-cyan);',
-        37 => 'color: var(--flux-ansi-white);',
-        90 => 'color: var(--flux-ansi-bright-black);',
-        91 => 'color: var(--flux-ansi-bright-red);',
-        92 => 'color: var(--flux-ansi-bright-green);',
-        93 => 'color: var(--flux-ansi-bright-yellow);',
-        94 => 'color: var(--flux-ansi-bright-blue);',
-        95 => 'color: var(--flux-ansi-bright-magenta);',
-        96 => 'color: var(--flux-ansi-bright-cyan);',
-        97 => 'color: var(--flux-ansi-bright-white);',
-        
-        // Background Colors
-        40 => 'background-color: var(--flux-ansi-black);',
-        41 => 'background-color: var(--flux-ansi-red);',
-        42 => 'background-color: var(--flux-ansi-green);',
-        43 => 'background-color: var(--flux-ansi-yellow);',
-        44 => 'background-color: var(--flux-ansi-blue);',
-        45 => 'background-color: var(--flux-ansi-magenta);',
-        46 => 'background-color: var(--flux-ansi-cyan);',
-        47 => 'background-color: var(--flux-ansi-white);',
+    private const FG_COLORS = [
+        30 => 'var(--ansi-black)',       31 => 'var(--ansi-red)',
+        32 => 'var(--ansi-green)',       33 => 'var(--ansi-yellow)',
+        34 => 'var(--ansi-blue)',        35 => 'var(--ansi-magenta)',
+        36 => 'var(--ansi-cyan)',        37 => 'var(--ansi-white)',
+        90 => 'var(--ansi-br-black)',    91 => 'var(--ansi-br-red)',
+        92 => 'var(--ansi-br-green)',    93 => 'var(--ansi-br-yellow)',
+        94 => 'var(--ansi-br-blue)',     95 => 'var(--ansi-br-magenta)',
+        96 => 'var(--ansi-br-cyan)',     97 => 'var(--ansi-br-white)',
     ];
 
-    private const STYLES = [
-        1 => 'font-weight: bold;',
-        3 => 'font-style: italic;',
-        4 => 'text-decoration: underline;',
+    private const BG_COLORS = [
+        40 => 'var(--ansi-black)',       41 => 'var(--ansi-red)',
+        42 => 'var(--ansi-green)',       43 => 'var(--ansi-yellow)',
+        44 => 'var(--ansi-blue)',        45 => 'var(--ansi-magenta)',
+        46 => 'var(--ansi-cyan)',        47 => 'var(--ansi-white)',
+        100 => 'var(--ansi-br-black)',   101 => 'var(--ansi-br-red)',
+        102 => 'var(--ansi-br-green)',   103 => 'var(--ansi-br-yellow)',
+        104 => 'var(--ansi-br-blue)',    105 => 'var(--ansi-br-magenta)',
+        106 => 'var(--ansi-br-cyan)',    107 => 'var(--ansi-br-white)',
     ];
 
-    /**
-     * Convert ANSI string to HTML
-     */
+    // 256-color palette (xterm) — generated on first use
+    private static ?array $palette256 = null;
+
     public function convert(string $text): string
     {
-        $text = htmlspecialchars($text, ENT_NOQUOTES, 'UTF-8');
+        // Handle carriage returns (progress bars): keep only last sub-line
+        if (str_contains($text, "\r")) {
+            $text = preg_replace('/[^\r\n]*\r/', '', $text);
+        }
 
-        // Pattern to match ANSI escape codes: \x1b, \033, or \e followed by [... and a letter
-        // Supports m (SGR) and K (Erase in Line)
-        $pattern = '/(?:\x1b|\\\\033|\\\\e)\[([0-9;]*?)([a-zA-Z])/';
+        // Escape HTML entities first (before we inject HTML spans)
+        $text = htmlspecialchars($text, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-        preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE);
-        
-        if (count($matches[0]) === 0) {
+        // Match all ANSI escape sequences
+        $pattern = '/\x1b\[([0-9;]*)([A-Za-z])/';
+
+        $segments = preg_split($pattern, $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if ($segments === false || count($segments) === 1) {
             return $text;
         }
-        
-        $currentStyles = [];
-        $lastOffset = 0;
-        $html = '';
-        
-        foreach ($matches[0] as $i => $fullMatch) {
-            $matchStr = $fullMatch[0];
-            $matchOffset = $fullMatch[1];
-            $paramsStr = $matches[1][$i][0]; // Parameters (e.g. "31;1")
-            $command = $matches[2][$i][0];   // Command (e.g. "m", "K")
-            
-            // Append text before this code
-            $segment = substr($text, $lastOffset, $matchOffset - $lastOffset);
-            if ($segment !== '') {
-                $html .= $this->wrap($segment, $currentStyles);
-            }
-            
-            // Handle Command
-            if ($command === 'm') {
-                // SGR - Select Graphic Rendition
-                $codes = $paramsStr === '' ? [] : explode(';', $paramsStr);
-                if (empty($codes)) {
-                    $currentStyles = []; // Reset
-                } else {
-                    foreach ($codes as $code) {
-                        $c = (int)$code;
-                        if ($c === 0) {
-                            $currentStyles = [];
-                        } elseif (isset(self::COLORS[$c]) || isset(self::STYLES[$c])) {
-                           if (($c >= 30 && $c <= 37) || ($c >= 90 && $c <= 97)) {
-                                $currentStyles = array_filter($currentStyles, fn($k) => !($k >= 30 && $k <= 37) && !($k >= 90 && $k <= 97), ARRAY_FILTER_USE_KEY);
-                           }
-                           if ($c >= 40 && $c <= 47) {
-                                $currentStyles = array_filter($currentStyles, fn($k) => !($k >= 40 && $k <= 47), ARRAY_FILTER_USE_KEY);
-                           }
-                           $currentStyles[$c] = true;
-                        }
-                    }
+
+        $html    = '';
+        $fg      = null;
+        $bg      = null;
+        $bold    = false;
+        $italic  = false;
+        $under   = false;
+        $dim     = false;
+        $openTag = false;
+
+        // segments alternate: [text, params, command, text, params, command, ...]
+        for ($i = 0, $c = count($segments); $i < $c; $i++) {
+            if ($i % 3 === 0) {
+                // Text segment
+                if ($segments[$i] !== '') {
+                    $html .= $this->buildSpan($segments[$i], $fg, $bg, $bold, $italic, $under, $dim);
                 }
-            } elseif ($command === 'K') {
-                // Erase in Line - Ignore for now (strip)
-                // TODO: Implement graphical line clearing if needed
+            } elseif ($i % 3 === 1) {
+                $params  = $segments[$i];
+                $command = $segments[$i + 1] ?? '';
+                $i++;
+
+                if ($command !== 'm') {
+                    continue; // Only handle SGR; ignore cursor moves, erase etc.
+                }
+
+                $codes = ($params === '') ? [0] : array_map('intval', explode(';', $params));
+                $j     = 0;
+
+                while ($j < count($codes)) {
+                    $c2 = $codes[$j];
+
+                    if ($c2 === 0) {
+                        $fg = $bg = null;
+                        $bold = $italic = $under = $dim = false;
+                    } elseif ($c2 === 1)  { $bold   = true; }
+                    elseif ($c2 === 2)    { $dim    = true; }
+                    elseif ($c2 === 3)    { $italic = true; }
+                    elseif ($c2 === 4)    { $under  = true; }
+                    elseif ($c2 === 22)   { $bold   = $dim = false; }
+                    elseif ($c2 === 23)   { $italic = false; }
+                    elseif ($c2 === 24)   { $under  = false; }
+                    elseif ($c2 === 39)   { $fg     = null; }
+                    elseif ($c2 === 49)   { $bg     = null; }
+                    elseif (isset(self::FG_COLORS[$c2])) { $fg = self::FG_COLORS[$c2]; }
+                    elseif (isset(self::BG_COLORS[$c2])) { $bg = self::BG_COLORS[$c2]; }
+                    elseif ($c2 === 38 && ($codes[$j + 1] ?? null) === 5) {
+                        // 256-color foreground: 38;5;n
+                        $fg = $this->color256($codes[$j + 2] ?? 0);
+                        $j += 2;
+                    } elseif ($c2 === 48 && ($codes[$j + 1] ?? null) === 5) {
+                        // 256-color background: 48;5;n
+                        $bg = $this->color256($codes[$j + 2] ?? 0);
+                        $j += 2;
+                    } elseif ($c2 === 38 && ($codes[$j + 1] ?? null) === 2) {
+                        // True-color foreground: 38;2;r;g;b
+                        $r = $codes[$j + 2] ?? 0;
+                        $g = $codes[$j + 3] ?? 0;
+                        $b = $codes[$j + 4] ?? 0;
+                        $fg = "rgb($r,$g,$b)";
+                        $j += 4;
+                    } elseif ($c2 === 48 && ($codes[$j + 1] ?? null) === 2) {
+                        // True-color background: 48;2;r;g;b
+                        $r = $codes[$j + 2] ?? 0;
+                        $g = $codes[$j + 3] ?? 0;
+                        $b = $codes[$j + 4] ?? 0;
+                        $bg = "rgb($r,$g,$b)";
+                        $j += 4;
+                    }
+
+                    $j++;
+                }
             }
-            
-            $lastOffset = $matchOffset + strlen($matchStr);
         }
-        
-        // Remaining text
-        $remaining = substr($text, $lastOffset);
-        if ($remaining !== '') {
-            $html .= $this->wrap($remaining, $currentStyles);
-        }
-        
+
         return $html;
     }
-    
-    private function wrap(string $text, array $styleCodes): string
+
+    private function buildSpan(
+        string $text,
+        ?string $fg, ?string $bg,
+        bool $bold, bool $italic, bool $under, bool $dim
+    ): string {
+        $css = '';
+
+        if ($fg !== null)  $css .= "color:$fg;";
+        if ($bg !== null)  $css .= "background:$bg;";
+        if ($bold)         $css .= 'font-weight:bold;';
+        if ($italic)       $css .= 'font-style:italic;';
+        if ($under)        $css .= 'text-decoration:underline;';
+        if ($dim)          $css .= 'opacity:.6;';
+
+        return $css !== ''
+            ? "<span style=\"$css\">$text</span>"
+            : $text;
+    }
+
+    private function color256(int $n): string
     {
-        if (empty($styleCodes)) {
-            return $text;
+        if (self::$palette256 === null) {
+            self::$palette256 = $this->buildPalette256();
         }
-        
-        $css = [];
-        foreach (array_keys($styleCodes) as $code) {
-             if (isset(self::COLORS[$code])) {
-                 $css[] = self::COLORS[$code];
-             }
-             if (isset(self::STYLES[$code])) {
-                 $css[] = self::STYLES[$code];
-             }
+        return self::$palette256[$n] ?? '#ffffff';
+    }
+
+    private function buildPalette256(): array
+    {
+        $p = [];
+        // 16 system colors handled by CSS vars already (0-15)
+        for ($i = 0; $i < 16; $i++) {
+            $names = ['black','red','green','yellow','blue','magenta','cyan','white',
+                      'br-black','br-red','br-green','br-yellow','br-blue','br-magenta','br-cyan','br-white'];
+            $p[$i] = "var(--ansi-{$names[$i]})";
         }
-        
-        if (empty($css)) {
-            return $text;
+        // 216-color cube (16-231)
+        for ($i = 16; $i <= 231; $i++) {
+            $idx = $i - 16;
+            $b   = $idx % 6; $idx = intdiv($idx, 6);
+            $g   = $idx % 6; $r   = intdiv($idx, 6);
+            $to  = fn(int $v) => $v === 0 ? 0 : 55 + 40 * $v;
+            $p[$i] = sprintf('rgb(%d,%d,%d)', $to($r), $to($g), $to($b));
         }
-        
-        return sprintf('<span style="%s">%s</span>', implode(' ', $css), $text);
+        // Grayscale (232-255)
+        for ($i = 232; $i <= 255; $i++) {
+            $v     = 8 + 10 * ($i - 232);
+            $p[$i] = "rgb($v,$v,$v)";
+        }
+        return $p;
     }
 }

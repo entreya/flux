@@ -1,386 +1,460 @@
-class FluxApp {
-    constructor(config) {
-        this.config = config;
-        this.data = {
-            activeJob: null,
-            logs: {}
-        };
+/**
+ * FluxUI — Real-time workflow log viewer
+ * entreya/flux
+ *
+ * Public API:
+ *   FluxUI.init(config)    — boot: { sseUrl, uploadUrl }
+ *   FluxUI.rerun()         — reset UI and reconnect SSE
+ *   FluxUI.toggleTheme()   — dark ↔ light
+ *   FluxUI.expandAll()     — expand all step accordions
+ */
 
-        this.elements = {
-            sidebar: document.getElementById('flux-sidebar'),
-            stepsContainer: document.getElementById('flux-steps-container'),
-            jobTitle: document.getElementById('flux-job-title'),
-            statusBadge: document.getElementById('workflow-status')
-        };
+const FluxUI = (() => {
 
-        this.init();
-    }
+  // ── State ────────────────────────────────────────────────────────────────
+  let es        = null;
+  let cfg       = {};
+  let lineIdx   = {};   // { "jobId-stepKey": lineNumber }
+  let stepFails = {};   // { "jobId-stepKey": true }
+  let jobTimers = {};   // { jobId: startTimestamp }
 
-    init() {
-        // Theme defaults to dark, no switcher now
-        this.setTheme('dark');
-        this.loadThemeCss('dark');
+  // ── DOM helpers ──────────────────────────────────────────────────────────
+  const $  = id => document.getElementById(id);
+  const el = (tag, cls = '', attrs = {}) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    return e;
+  };
 
-        this.setupDragDrop();
-        this.setupSearch();
+  // Bootstrap Icons (bi-*) mapped to status
+  const ICONS = {
+    pending: 'bi-circle',
+    running: 'bi-arrow-repeat',
+    success: 'bi-check-circle-fill',
+    failure: 'bi-x-circle-fill',
+    skipped: 'bi-dash-circle',
+  };
 
-        this.data.lineCounts = {}; // Track line numbers per step
+  const PHASE_HTML = {
+    pre:  '<span class="flux-phase-badge flux-phase-pre">pre</span>',
+    post: '<span class="flux-phase-badge flux-phase-post">post</span>',
+    main: '',
+  };
 
-        // Fix: Only setup SSE if URL is present (prevents console error on Data-Drop page)
-        if (this.config.sseUrl) {
-            this.setupSSE();
+  // ── SSE ──────────────────────────────────────────────────────────────────
+  function connect(url) {
+    if (es) { es.close(); es = null; }
+    es = new EventSource(url);
+
+    // Helper: listen for a named server-sent event and JSON-parse its data safely
+    const on = (name, fn) => es.addEventListener(name, e => {
+      if (!e.data) return; // guard: browser error events have no data
+      try { fn(JSON.parse(e.data)); } catch(err) { console.warn('[Flux] bad JSON in', name, err); }
+    });
+
+    on('workflow_start',    onWorkflowStart);
+    on('job_start',         onJobStart);
+    on('job_success',       d => onJobDone(d, 'success'));
+    on('job_failure',       d => onJobDone(d, 'failure'));
+    on('job_skipped',       onJobSkipped);
+    on('step_start',        onStepStart);
+    on('step_success',      d => onStepDone(d, 'success'));
+    on('step_failure',      d => onStepDone(d, 'failure'));
+    on('step_skipped',      onStepSkipped);
+    on('log',               onLog);
+    on('workflow_complete', () => onWorkflowDone('success'));
+    on('workflow_failed',   d => onWorkflowDone('failure', d.message));
+
+    // Server-sent `error` event (named, has JSON data with a message field)
+    es.addEventListener('error', e => {
+      if (!e.data) return; // ignore browser-level connection drops here
+      try {
+        const d = JSON.parse(e.data);
+        console.error('[Flux server error]', d.message);
+        setRunBadge('failure');
+        enableRerun();
+        // Stop reconnecting — this is a fatal server error (auth, not found, etc.)
+        es.close();
+      } catch {}
+    });
+
+    // stream_close = server intentionally ended the stream
+    es.addEventListener('stream_close', () => es.close());
+
+    // Browser-level connection error (network issue, server down, etc.)
+    // EventSource will auto-retry — we just update the badge.
+    // If it stays CLOSED, enable the rerun button.
+    es.onerror = () => {
+      setTimeout(() => {
+        if (es && es.readyState === EventSource.CLOSED) {
+          setRunBadge('failure');
+          enableRerun();
         }
+      }, 1000);
+    };
+  }
+
+  // ── Workflow events ──────────────────────────────────────────────────────
+  function onWorkflowStart(d) {
+    setRunBadge('running');
+    setText('fx-job-heading', d.name);
+  }
+
+  function onJobStart(d) {
+    jobTimers[d.id] = Date.now();
+    upsertJobItem(d.id, d.name, 'running');
+    setText('fx-job-heading', d.name);
+  }
+
+  function onJobDone(d, status) {
+    const elapsed = jobTimers[d.id]
+      ? ((Date.now() - jobTimers[d.id]) / 1000).toFixed(1) + 's'
+      : '';
+
+    setJobStatus(d.id, status);
+
+    const durEl = $(`job-dur-${d.id}`);
+    if (durEl) durEl.textContent = elapsed;
+
+    addJobSeparator(d.id, d.name ?? d.id, elapsed, status === 'failure');
+  }
+
+  function onJobSkipped(d) {
+    upsertJobItem(d.id, d.name ?? d.id, 'skipped');
+    setJobStatus(d.id, 'skipped');
+    addJobSeparator(d.id, d.name ?? d.id, '', false, true);
+  }
+
+  function onStepStart(d) {
+    upsertStep(d.job, d.step, d.name, d.phase ?? 'main');
+    setStepStatus(d.job, d.step, 'running');
+  }
+
+  function onStepDone(d, status) {
+    setStepStatus(d.job, d.step, status, d.duration ?? null);
+
+    if (status === 'failure') {
+      stepFails[`${d.job}-${d.step}`] = true;
+      const stepEl = $(`step-${d.job}-${d.step}`);
+      if (stepEl) stepEl.open = true;
+    } else {
+      // Auto-collapse successful steps after a short pause
+      setTimeout(() => {
+        const stepEl = $(`step-${d.job}-${d.step}`);
+        if (stepEl && !stepFails[`${d.job}-${d.step}`]) stepEl.open = false;
+      }, 900);
+    }
+  }
+
+  function onStepSkipped(d) {
+    upsertStep(d.job, d.step, d.name ?? d.step, d.phase ?? 'main');
+    setStepStatus(d.job, d.step, 'skipped');
+  }
+
+  function onLog(d) {
+    appendLog(d.job, d.step, d.type, d.content);
+  }
+
+  function onWorkflowDone(status) {
+    setRunBadge(status);
+    if (status === 'success') {
+      document.querySelectorAll('.flux-job-item[data-status="running"]')
+        .forEach(item => setJobStatus(item.dataset.jobId, 'success'));
+    }
+    if (es) es.close();
+    enableRerun();
+  }
+
+  // ── Sidebar ──────────────────────────────────────────────────────────────
+  function upsertJobItem(id, name, status) {
+    const list = $('fx-job-list');
+    if (!list) return;
+
+    // Clear placeholder on first job
+    const ph = list.querySelector('.flux-sidebar-empty');
+    if (ph) ph.remove();
+
+    if ($(`job-item-${id}`)) return;
+
+    const item = el('div', 'flux-job-item', {
+      id: `job-item-${id}`,
+      'data-job-id': id,
+      'data-status': status,
+    });
+    item.innerHTML = `
+      <span class="flux-status-dot" id="job-dot-${id}"></span>
+      <span class="flux-job-name">${esc(name)}</span>
+      <span class="flux-job-dur text-muted" id="job-dur-${id}"></span>
+    `;
+    item.addEventListener('click', () => scrollToJob(id));
+    list.appendChild(item);
+    setJobDot(id, status);
+  }
+
+  function setJobStatus(id, status) {
+    const item = $(`job-item-${id}`);
+    if (item) {
+      item.dataset.status = status;
+      item.classList.toggle('is-active', status === 'running');
+    }
+    setJobDot(id, status);
+  }
+
+  function setJobDot(id, status) {
+    const dot = $(`job-dot-${id}`);
+    if (!dot) return;
+    dot.className = `flux-status-dot is-${status}`;
+    dot.textContent = { success: '✓', failure: '✕', skipped: '–', pending: '', running: '' }[status] ?? '';
+  }
+
+  // ── Steps ────────────────────────────────────────────────────────────────
+  function upsertStep(jobId, stepKey, name, phase) {
+    const id = `step-${jobId}-${stepKey}`;
+    if ($(id)) return;
+
+    const steps = $('fx-steps');
+    if (!steps) return;
+
+    const details = el('details', 'flux-step', {
+      id,
+      'data-job':    jobId,
+      'data-step':   stepKey,
+      'data-status': 'pending',
+    });
+    details.open = true;
+
+    details.innerHTML = `
+      <summary class="flux-step-summary">
+        <i class="bi ${ICONS.pending} flux-step-icon is-pending" id="step-icon-${jobId}-${stepKey}"></i>
+        ${PHASE_HTML[phase] ?? ''}
+        <span class="flux-step-name">${esc(name)}</span>
+        <span class="flux-step-duration text-muted" id="step-dur-${jobId}-${stepKey}"></span>
+        <i class="bi bi-chevron-right flux-step-chevron ms-1"></i>
+      </summary>
+      <div class="flux-log-body" id="logs-${jobId}-${stepKey}"></div>
+    `;
+
+    steps.appendChild(details);
+    details.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function setStepStatus(jobId, stepKey, status, duration = null) {
+    const stepEl = $(`step-${jobId}-${stepKey}`);
+    if (stepEl) stepEl.dataset.status = status;
+
+    const icon = $(`step-icon-${jobId}-${stepKey}`);
+    if (icon) icon.className = `bi ${ICONS[status] ?? ICONS.pending} flux-step-icon is-${status}`;
+
+    if (duration !== null) {
+      const dur = $(`step-dur-${jobId}-${stepKey}`);
+      if (dur) dur.textContent = `${duration}s`;
+    }
+  }
+
+  // ── Job separator line (between jobs, like GitHub Actions) ───────────────
+  function addJobSeparator(jobId, jobName, elapsed = '', failed = false, skipped = false) {
+    const steps = $('fx-steps');
+    if (!steps) return;
+
+    const color  = skipped ? 'var(--bs-secondary-color)' : failed ? 'var(--flux-danger)' : 'var(--flux-success)';
+    const icon   = skipped ? 'bi-dash-circle' : failed ? 'bi-x-circle-fill' : 'bi-check-circle-fill';
+    const label  = `${esc(jobName)}${elapsed ? ' · ' + elapsed : ''}`;
+
+    const sep = el('div', 'd-flex align-items-center gap-2 py-2 px-1');
+    sep.innerHTML = `
+      <div style="flex:1;height:1px;background:var(--bs-border-color)"></div>
+      <span class="small text-muted d-flex align-items-center gap-1">
+        <i class="bi ${icon}" style="color:${color};font-size:12px"></i>
+        ${label}
+      </span>
+      <div style="flex:1;height:1px;background:var(--bs-border-color)"></div>
+    `;
+    steps.appendChild(sep);
+  }
+
+  // ── Log lines ─────────────────────────────────────────────────────────────
+  function appendLog(jobId, stepKey, type, content) {
+    const container = $(`logs-${jobId}-${stepKey}`);
+    if (!container) return;
+
+    const key    = `${jobId}-${stepKey}`;
+    const num    = (lineIdx[key] = (lineIdx[key] ?? 0) + 1);
+    const ts     = new Date().toISOString().slice(11, 23);
+
+    const line = el('div', 'flux-log-line', { 'data-type': type });
+    line.dataset.raw = content;
+    line.innerHTML = `
+      <span class="flux-lineno">${num}</span>
+      <span class="flux-log-ts">${ts}</span>
+      <span class="flux-log-content">${content}</span>
+    `;
+
+    container.appendChild(line);
+
+    // Scroll the step area if near bottom
+    const steps = $('fx-steps');
+    if (steps && (steps.scrollHeight - steps.scrollTop) < steps.clientHeight + 150) {
+      steps.scrollTop = steps.scrollHeight;
     }
 
-    showWorkflowFile(file) {
-        fetch('?action=get_workflow_content&file=' + encodeURIComponent(file))
-            .then(r => {
-                if (!r.ok) throw new Error('File not found');
-                return r.text();
-            })
-            .then(text => {
-                const view = document.getElementById('file-content-view');
-                if (view) view.textContent = text;
-                const modalEl = document.getElementById('fileModal');
-                if (modalEl && window.bootstrap) {
-                    const modal = new bootstrap.Modal(modalEl);
-                    modal.show();
-                } else {
-                    console.error('Bootstrap Modal not found or Bootstrap not loaded');
-                }
-            })
-            .catch(e => alert(e.message));
-    }
+    // Honour active search
+    const term = $('fx-search')?.value.trim();
+    if (term) filterLine(line, term);
+  }
 
-    setupSearch() {
-        const input = document.getElementById('log-search');
-        if (!input) return;
+  // ── Search ────────────────────────────────────────────────────────────────
+  function setupSearch() {
+    const input = $('fx-search');
+    if (!input) return;
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => runSearch(input.value.trim()), 200);
+    });
+  }
 
-        // Anti-bounce for performance
-        let timeout;
-        input.addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                const term = e.target.value.trim();
-                const regex = term ? new RegExp(term, 'i') : null;
+  function runSearch(term) {
+    document.querySelectorAll('.flux-log-line').forEach(line => filterLine(line, term));
+    document.querySelectorAll('.flux-step').forEach(step => {
+      if (!term) { step.style.display = ''; return; }
+      const hits = step.querySelectorAll('.flux-log-line:not(.is-hidden)').length;
+      step.style.display = hits > 0 ? '' : 'none';
+      if (hits > 0) step.open = true;
+    });
+  }
 
-                document.querySelectorAll('.flux-step').forEach(step => {
-                    const lines = step.querySelectorAll('.flux-log-line');
-                    let matchCount = 0;
+  function filterLine(line, term) {
+    if (!term) { line.classList.remove('is-hidden', 'is-match'); return; }
+    const text = line.querySelector('.flux-log-content')?.textContent ?? '';
+    let match = false;
+    try { match = new RegExp(term, 'i').test(text); }
+    catch { match = text.toLowerCase().includes(term.toLowerCase()); }
+    line.classList.toggle('is-hidden', !match);
+    line.classList.toggle('is-match',   match);
+  }
 
-                    lines.forEach(line => {
-                        if (!term) {
-                            line.style.display = 'flex';
-                            matchCount++;
-                            return;
-                        }
+  // ── Drop zone ─────────────────────────────────────────────────────────────
+  function setupDropZone() {
+    const dz    = $('fx-dropzone');
+    const input = $('fx-file-input');
+    if (!dz) return;
 
-                        const content = line.querySelector('.flux-log-content').innerText;
-                        const isMatch = regex.test(content);
-                        line.style.display = isMatch ? 'flex' : 'none';
-                        if (isMatch) matchCount++;
-                    });
+    ['dragenter','dragover','dragleave','drop'].forEach(ev =>
+      document.body.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); }));
 
-                    // Toggle step visibility based on matches
-                    if (term && matchCount === 0) {
-                        step.style.display = 'none';
-                    } else {
-                        step.style.display = 'block';
-                        // Auto-expand if matches found
-                        if (term) step.open = true;
-                    }
-                });
-            }, 300);
-        });
-    }
+    ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, () => dz.classList.add('is-over')));
+    ['dragleave','drop'].forEach(ev  => dz.addEventListener(ev, () => dz.classList.remove('is-over')));
+    dz.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+    input?.addEventListener('change', () => handleFiles(input.files));
+  }
 
-    setupDragDrop() {
-        const dropzone = document.getElementById('flux-dropzone');
-        // We bind to BODY to catch drops anywhere
-        const target = document.body;
+  function handleFiles(files) {
+    const file = files?.[0];
+    if (!file) return;
+    if (!/\.(ya?ml)$/i.test(file.name)) { alert('Select a .yaml or .yml file.'); return; }
+    uploadFile(file);
+  }
 
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            target.addEventListener(eventName, preventDefaults, false);
-        });
+  function uploadFile(file) {
+    const dz = $('fx-dropzone');
+    if (dz) dz.innerHTML = `
+      <div class="flux-dz-icon mb-2"><i class="bi bi-arrow-repeat" style="font-size:36px;animation:spin .9s linear infinite"></i></div>
+      <p class="text-muted small">Uploading…</p>`;
+    const fd = new FormData();
+    fd.append('workflow_file', file);
+    fetch(cfg.uploadUrl ?? 'upload.php', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(d => {
+        if (d.workflow) location.href = `index.php?workflow=${encodeURIComponent(d.workflow)}`;
+        else alert(d.error ?? 'Upload failed');
+      })
+      .catch(() => alert('Upload failed. Check server logs.'));
+  }
 
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
+  // ── Status badge ──────────────────────────────────────────────────────────
+  function setRunBadge(status) {
+    const badge = $('fx-status-badge');
+    if (!badge) return;
+    badge.dataset.status = status;
+    const labels = { pending: 'Connecting', running: 'Running', success: 'Completed', failure: 'Failed' };
+    badge.querySelector('.flux-run-text').textContent = labels[status] ?? status;
+  }
 
-        if (dropzone) {
-            ['dragenter', 'dragover'].forEach(eventName => {
-                dropzone.addEventListener(eventName, () => dropzone.classList.add('highlight'), false);
-            });
+  // ── Rerun ─────────────────────────────────────────────────────────────────
+  function rerun() {
+    if (!cfg.sseUrl) return;
+    lineIdx   = {};
+    stepFails = {};
+    jobTimers = {};
 
-            ['dragleave', 'drop'].forEach(eventName => {
-                dropzone.addEventListener(eventName, () => dropzone.classList.remove('highlight'), false);
-            });
+    const list = $('fx-job-list');
+    if (list) list.innerHTML = `<div class="flux-sidebar-empty text-muted small fst-italic">Waiting for workflow…</div>`;
 
-            dropzone.addEventListener('drop', (e) => {
-                const dt = e.dataTransfer;
-                const files = dt.files;
-                this.handleFiles(files);
-            });
-        }
+    const steps = $('fx-steps');
+    if (steps) steps.innerHTML = '';
 
-        // Also allow drop on body if dropzone is missing (active view)
-        target.addEventListener('drop', (e) => {
-            // If dropzone exists, the specific listener handles it. If not, we handle it here.
-            if (!dropzone && e.dataTransfer.files.length > 0) {
-                this.handleFiles(e.dataTransfer.files);
-            }
-        });
+    setText('fx-job-heading', 'Initializing…');
+    setRunBadge('pending');
 
-        const input = document.getElementById('file-upload');
-        if (input) {
-            input.addEventListener('change', () => this.handleFiles(input.files));
-        }
-    }
+    const btn = $('fx-rerun-btn');
+    if (btn) btn.disabled = true;
 
-    handleFiles(files) {
-        if (files.length > 0) {
-            this.uploadFile(files[0]);
-        }
-    }
+    connect(cfg.sseUrl);
+  }
 
-    uploadFile(file) {
-        const url = '?action=upload';
-        const formData = new FormData();
-        formData.append('workflow_file', file);
+  function enableRerun() {
+    const btn = $('fx-rerun-btn');
+    if (btn) btn.disabled = false;
+  }
 
-        // Show loading state?
-        const dropzone = document.getElementById('flux-dropzone');
-        if (dropzone) {
-            dropzone.innerHTML = '<div class="dropzone-content"><h1>⏳ Uploading...</h1></div>';
-        }
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-bs-theme', t);
+    localStorage.setItem('flux-theme', t);
+    const icon = $('fx-theme-icon');
+    if (icon) icon.className = t === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+  }
 
-        fetch(url, {
-            method: 'POST',
-            body: formData
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.file) {
-                    window.location.href = '?workflow=' + encodeURIComponent(data.file);
-                } else {
-                    alert('Upload failed: ' + (data.error || 'Unknown error'));
-                    if (dropzone) dropzone.innerHTML = 'Error';
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                alert('Upload error');
-            });
-    }
+  function toggleTheme() {
+    const cur = localStorage.getItem('flux-theme') ?? 'dark';
+    applyTheme(cur === 'dark' ? 'light' : 'dark');
+  }
 
-    setTheme(theme) {
-        document.body.className = '';
-        document.body.classList.add('theme-' + theme);
-        document.body.setAttribute('data-bs-theme', theme); // Bootstrap Theme
-        localStorage.setItem('flux-theme', theme);
+  // ── Utilities ─────────────────────────────────────────────────────────────
+  function scrollToJob(jobId) {
+    const first = document.querySelector(`.flux-step[data-job="${jobId}"]`);
+    if (first) first.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelectorAll('.flux-job-item').forEach(i => i.classList.remove('is-active'));
+    $(`job-item-${jobId}`)?.classList.add('is-active');
+  }
 
-        // Update Icon
-        const icon = document.getElementById('theme-icon');
-        if (icon) {
-            icon.className = theme === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
-        }
-    }
+  function expandAll() {
+    document.querySelectorAll('.flux-step').forEach(s => { s.open = true; });
+  }
 
-    toggleTheme() {
-        const current = localStorage.getItem('flux-theme') || 'dark';
-        const newTheme = current === 'dark' ? 'light' : 'dark';
-        this.setTheme(newTheme);
-        this.loadThemeCss(newTheme);
-    }
+  function setText(id, text) {
+    const e = $(id);
+    if (e) e.textContent = text;
+  }
 
-    toggleSidebar() {
-        const sidebar = document.getElementById('flux-sidebar');
-        if (sidebar) sidebar.classList.toggle('show');
-    }
+  function esc(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
 
-    loadThemeCss(theme) {
-        fetch(`?action=get_theme_css&theme=${theme}`)
-            .then(r => r.text())
-            .then(css => document.getElementById('flux-theme-style').innerHTML = css);
-    }
+  // ── Init ──────────────────────────────────────────────────────────────────
+  function init(config) {
+    cfg = config ?? {};
+    applyTheme(localStorage.getItem('flux-theme') ?? 'dark');
+    setupSearch();
+    setupDropZone();
+    if (cfg.sseUrl) connect(cfg.sseUrl);
+  }
 
-    setupSSE() {
-        if (this.es) this.es.close();
+  return { init, rerun, toggleTheme, expandAll };
 
-        this.es = new EventSource(this.config.sseUrl);
-
-        this.es.addEventListener('workflow_start', e => {
-            const d = JSON.parse(e.data);
-            console.log('Workflow via SSE:', d.name);
-            this.setWorkflowStatus('running');
-        });
-
-        this.es.addEventListener('job_start', e => {
-            const d = JSON.parse(e.data);
-            this.addJob(d);
-        });
-
-        this.es.addEventListener('step_start', e => {
-            const d = JSON.parse(e.data);
-            this.addStep(d);
-            this.setStepStatus(d.job, d.step, 'running');
-            this.focusStep(d.job, d.step);
-
-            // Mark job as running (spinner)
-            this.setJobStatus(d.job, 'running');
-        });
-
-        this.es.addEventListener('log', e => {
-            const d = JSON.parse(e.data);
-            this.addLog(d.job, d.step, d.content, d.type);
-        });
-
-        this.es.addEventListener('step_success', e => {
-            const d = JSON.parse(e.data);
-            this.setStepStatus(d.job, d.step, 'success', d.duration);
-        });
-
-        this.es.addEventListener('step_failure', e => {
-            const d = JSON.parse(e.data);
-            this.setStepStatus(d.job, d.step, 'failure');
-            this.setJobStatus(d.job, 'failure');
-        });
-
-        this.es.addEventListener('workflow_complete', () => {
-            this.setWorkflowStatus('success');
-            document.querySelectorAll('.job-status-icon.status-running').forEach(el => {
-                el.className = 'icon-status job-status-icon status-success';
-            });
-            this.es.close();
-        });
-
-        this.es.addEventListener('workflow_failed', (e) => {
-            this.setWorkflowStatus('failure');
-            this.es.close();
-        });
-
-        this.es.addEventListener('error', e => {
-            const d = JSON.parse(e.data);
-            console.error('Server Error:', d.message);
-            this.setWorkflowStatus('failure');
-            this.es.close();
-        });
-
-        this.es.onerror = (e) => {
-            // Browser logs connection errors automatically
-        };
-    }
-
-    addJob(job) {
-        const div = document.createElement('div');
-        div.className = 'flux-job-group';
-        div.id = `job-sidebar-${job.id}`;
-        div.innerHTML = `
-            <div class="flux-job-item active">
-                <span class="icon-status status-pending job-status-icon" id="job-icon-${job.id}"></span>
-                <span class="job-name">${job.name}</span>
-            </div>
-        `;
-        this.elements.sidebar.appendChild(div);
-
-        if (this.elements.jobTitle) {
-            this.elements.jobTitle.innerText = `${job.name}`;
-        }
-        this.data.activeJob = job.id;
-    }
-
-    setJobStatus(jobId, status) {
-        const icon = document.getElementById(`job-icon-${jobId}`);
-        if (icon) {
-            icon.className = `icon-status status-${status} job-status-icon`;
-        }
-    }
-
-    addStep(step) {
-        const id = `step-${step.job}-${step.step}`;
-        if (document.getElementById(id)) return;
-
-        const details = document.createElement('details');
-        details.className = 'flux-step';
-        details.id = id;
-        details.open = true;
-
-        details.innerHTML = `
-            <summary class="flux-step-summary">
-                <div class="flux-step-title">
-                    <span class="icon-status status-pending" id="icon-${step.job}-${step.step}"></span>
-                    ${step.name}
-                </div>
-                <div class="flux-step-duration" id="meta-${step.job}-${step.step}"></div>
-            </summary>
-            <div class="flux-step-logs" id="logs-${step.job}-${step.step}"></div>
-        `;
-
-        this.elements.stepsContainer.appendChild(details);
-        details.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-
-    setStepStatus(jobId, stepIdx, status, duration = null) {
-        const icon = document.getElementById(`icon-${jobId}-${stepIdx}`);
-        if (icon) {
-            icon.className = `icon-status status-${status}`;
-        }
-
-        if (duration) {
-            const meta = document.getElementById(`meta-${jobId}-${stepIdx}`);
-            if (meta) meta.innerText = duration.toFixed(1) + 's';
-        }
-
-        if (status === 'success') {
-            const details = document.getElementById(`step-${jobId}-${stepIdx}`);
-            if (details) {
-                setTimeout(() => details.open = false, 1000);
-            }
-        }
-
-        if (status === 'failure') {
-            const details = document.getElementById(`step-${jobId}-${stepIdx}`);
-            if (details) details.open = true;
-        }
-    }
-
-    addLog(jobId, stepIdx, content, type) {
-        const container = document.getElementById(`logs-${jobId}-${stepIdx}`);
-        if (!container) return;
-
-        const id = `${jobId}-${stepIdx}`;
-        if (!this.data.lineCounts) this.data.lineCounts = {};
-        if (!this.data.lineCounts[id]) this.data.lineCounts[id] = 1;
-        const lineNum = this.data.lineCounts[id]++;
-
-        const div = document.createElement('div');
-        div.className = 'flux-log-line';
-        const ts = new Date().toISOString().split('T')[1].substr(0, 12);
-
-        const numSpan = `<span class="flux-lineno">${lineNum}</span>`;
-        const prefix = type === 'command' ? '<span class="flux-cmd-prompt">$</span>' : '';
-        const timestamp = `<span class="flux-log-ts">${ts}</span>`;
-        const contentSpan = `<span class="flux-log-content">${prefix}${content}</span>`;
-
-        div.innerHTML = `${numSpan}${timestamp}${contentSpan}`;
-        container.appendChild(div);
-
-        container.scrollTop = container.scrollHeight;
-    }
-
-    focusStep(jobId, stepIdx) {
-        const details = document.getElementById(`step-${jobId}-${stepIdx}`);
-        if (details) {
-            details.open = true;
-        }
-    }
-
-    setWorkflowStatus(status) {
-        const el = this.elements.statusBadge;
-        if (el) {
-            el.className = `flux-status-badge ${status}`;
-            el.innerText = status.toUpperCase();
-        }
-    }
-}
+})();

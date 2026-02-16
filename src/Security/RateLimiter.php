@@ -6,44 +6,78 @@ namespace Entreya\Flux\Security;
 
 use Entreya\Flux\Exceptions\SecurityException;
 
+/**
+ * Simple sliding-window rate limiter.
+ *
+ * Uses APCu when available (recommended for production), falls back to
+ * temp files for environments without APCu.
+ */
 class RateLimiter
 {
-    private int $maxPerHour;
-    
-    public function __construct(int $maxPerHour = 10)
-    {
-        $this->maxPerHour = $maxPerHour;
-    }
+    public function __construct(
+        private readonly int    $maxPerHour = 60,
+        private readonly string $storageDir = '',
+    ) {}
 
     /**
-     * Simple file-based rate limiter per IP.
-     * In production use Redis/Memcached.
+     * @throws SecurityException
      */
-    public function check(string $ip): void
+    public function check(string $identifier): void
     {
-        $tmpDir = sys_get_temp_dir() . '/flux_limits';
-        if (!is_dir($tmpDir)) {
-            mkdir($tmpDir, 0777, true);
+        if ($this->maxPerHour <= 0) {
+            return; // Rate limiting disabled
         }
 
-        $file = $tmpDir . '/' . md5($ip) . '.json';
-        $data = ['count' => 0, 'start_time' => time()];
-        
-        if (file_exists($file)) {
-            $data = json_decode(file_get_contents($file), true);
+        $key   = 'flux_rl_' . md5($identifier);
+        $count = $this->increment($key);
+
+        if ($count > $this->maxPerHour) {
+            throw new SecurityException(
+                "Rate limit exceeded. Maximum {$this->maxPerHour} requests per hour."
+            );
+        }
+    }
+
+    private function increment(string $key): int
+    {
+        // Prefer APCu for atomic operations
+        if (function_exists('apcu_inc')) {
+            if (!apcu_exists($key)) {
+                apcu_store($key, 0, ttl: 3600);
+            }
+            return (int) apcu_inc($key);
         }
 
-        // Reset if hour passed
-        if (time() - $data['start_time'] > 3600) {
-            $data = ['count' => 0, 'start_time' => time()];
+        return $this->fileIncrement($key);
+    }
+
+    private function fileIncrement(string $key): int
+    {
+        $dir  = $this->storageDir ?: sys_get_temp_dir() . '/flux_rate_limits';
+        $file = "$dir/$key.json";
+
+        if (!is_dir($dir)) {
+            mkdir($dir, 0700, recursive: true);
         }
 
-        if ($data['count'] >= $this->maxPerHour) {
-            // Throw exception, but we should also ideally let the caller handle it to send a "stop" signal
-            throw new SecurityException("Rate limit exceeded. Max {$this->maxPerHour} workflows per hour.");
+        $fp = fopen($file, 'c+');
+        flock($fp, LOCK_EX);
+
+        $data = json_decode(fread($fp, 512) ?: '{}', true) ?? [];
+
+        // Reset window if older than 1 hour
+        if (empty($data) || (time() - ($data['start'] ?? 0)) > 3600) {
+            $data = ['start' => time(), 'count' => 0];
         }
 
         $data['count']++;
-        file_put_contents($file, json_encode($data));
+
+        rewind($fp);
+        fwrite($fp, json_encode($data));
+        ftruncate($fp, ftell($fp));
+        flock($fp, LOCK_UN);
+        fclose($fp);
+
+        return $data['count'];
     }
 }

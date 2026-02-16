@@ -1,0 +1,61 @@
+name: Import Customer Data
+
+env:
+  BATCH_SIZE: "500"
+
+jobs:
+  validate:
+    name: Validate File
+    pre:
+      - name: Acquire import lock
+        run: echo "Lock acquired."
+    steps:
+      - name: Check CSV format
+        run: |
+          echo "Checking headers..."
+          echo "✓ Required columns present: id, name, email, created_at"
+      - name: Count rows
+        run: echo "Found 12,450 rows. OK."
+      - name: Check for duplicates
+        run: |
+          echo "Scanning for duplicate emails..."
+          printf '\033[32m✓ No duplicates found\033[0m\n'
+    post:
+      - name: Release lock on failure
+        run: echo "Lock released."
+
+  process:
+    name: Process Records
+    needs: validate
+    steps:
+      - name: Insert batch 1/25
+        run: |
+          echo "Processing rows 1–500..."
+          sleep 1
+          printf '\033[32m✓ 500 rows inserted\033[0m\n'
+      - name: Insert batch 2/25
+        run: |
+          echo "Processing rows 501–1000..."
+          sleep 1
+          printf '\033[32m✓ 500 rows inserted\033[0m\n'
+      - name: Update search index
+        run: |
+          echo "Rebuilding search index..."
+          sleep 1
+          printf '\033[32m✓ Index updated (12,450 documents)\033[0m\n'
+    post:
+      - name: Release import lock
+        run: echo "Import lock released."
+      - name: Clean temp files
+        run: echo "Removed /tmp/import-staging/"
+
+  notify:
+    name: Notify
+    needs: process
+    steps:
+      - name: Send completion email
+        run: echo "Email sent to admin@example.com"
+      - name: Post to Slack
+        run: |
+          echo "Slack message posted to #imports:"
+          printf '\033[36m  Import complete: 12,450 records processed in 3.2s\033[0m\n'

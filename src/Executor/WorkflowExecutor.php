@@ -4,133 +4,207 @@ declare(strict_types=1);
 
 namespace Entreya\Flux\Executor;
 
-use Entreya\Flux\Parser\YamlParser;
 use Entreya\Flux\Exceptions\FluxException;
-use Entreya\Flux\Exceptions\ExecutionException;
+use Entreya\Flux\Pipeline\Job;
+use Entreya\Flux\Pipeline\Step;
 
+/**
+ * Executes a pipeline and yields structured events.
+ *
+ * Phase execution contract (mirrors GitHub Actions):
+ *  1. pre  steps  — if one fails (no continue-on-error), skip remaining pre + all main steps
+ *  2. main steps  — stop on first failure unless continue-on-error is set
+ *  3. post steps  — ALWAYS execute, even when pre or main failed
+ *
+ * All step events carry a `phase` field: 'pre' | 'main' | 'post'
+ */
 class WorkflowExecutor
 {
-    private CommandRunner $runner;
-    private YamlParser $parser;
-    private array $globalEnv;
+    public function __construct(
+        private readonly CommandRunner $runner,
+        private readonly array         $globalEnv = [],
+    ) {}
 
-    public function __construct(CommandRunner $runner, YamlParser $parser, array $globalEnv = [])
+    /** @return \Generator<array> */
+    public function execute(string $name, array $jobs): \Generator
     {
-        $this->runner = $runner;
-        $this->parser = $parser;
-        $this->globalEnv = $globalEnv;
-    }
+        $completedJobs = [];
 
-    /**
-     * @param string $yamlContent
-     * @return \Generator yields events including logs and status
-     */
-    public function execute(string $yamlContent): \Generator
-    {
-        $workflow = $this->parser->parse($yamlContent);
-        
-        // Flatten structure for easier iteration if needed, but here we process hierarchy
-        $name = $workflow['name'] ?? 'Untitled Workflow';
-        $jobs = $workflow['jobs'] ?? [];
-
-        // Check if old format (single 'steps' array)
-        if (isset($workflow['steps']) && !isset($workflow['jobs'])) {
-             // Migrate on fly for fallback? 
-             $jobs = ['default' => ['name' => 'Default Job', 'steps' => $workflow['steps']]];
-        }
-
-        $totalJobs = count($jobs);
-        
-        // Send initial metadata
-        yield ['event' => 'workflow_start', 'data' => [
-            'name' => $name, 
-            'job_count' => $totalJobs,
-            'jobs' => array_keys($jobs) // Send job IDs to init UI
-        ]];
+        yield $this->event('workflow_start', [
+            'name'      => $name,
+            'job_count' => count($jobs),
+            'job_ids'   => array_keys($jobs),
+        ]);
 
         foreach ($jobs as $jobId => $job) {
-            $jobName = $job['name'] ?? $jobId;
-            $steps = $job['steps'] ?? [];
-            
-            // Dependencies check (simulated)
-            $needs = $job['needs'] ?? [];
-            if (!is_array($needs)) $needs = [$needs];
-            
-            // In a real runner we would wait for them. Here we execute sequentially so dependencies are implicitly met 
-            // IF the YAML is ordered correctly or we order them.
-            // For simplicity in this version, we execute in defined order.
-
-            yield ['event' => 'job_start', 'data' => [
-                'id' => $jobId, 
-                'name' => $jobName,
-                'steps_count' => count($steps)
-            ]];
-
-            foreach ($steps as $index => $step) {
-                $stepName = $step['name'] ?? "Step #".($index+1);
-                $command = $step['run'] ?? null;
-                
-                // Merge Envs: Global -> Job -> Step
-                $stepEnv = $step['env'] ?? []; 
-                $jobEnv = $job['env'] ?? [];
-                
-                // Priority: Step > Job > Global
-                $finalEnv = array_merge($this->globalEnv, $jobEnv, $stepEnv);
-                
-                if (!$command) {
-                    // Could be a 'uses' action (not supported yet)
-                    yield ['event' => 'step_skipped', 'data' => ['job' => $jobId, 'step' => $index, 'reason' => 'No run command']];
-                    continue;
-                }
-
-                yield ['event' => 'step_start', 'data' => [
-                    'job' => $jobId, 
-                    'step' => $index, 
-                    'name' => $stepName
-                ]];
-
-                $startTime = microtime(true);
-                try {
-                    // Send command alias
-                    yield ['event' => 'log', 'data' => [
-                         'job' => $jobId,
-                         'step' => $index,
-                         'type' => 'command', 
-                         'content' => "> $command"
-                    ]];
-
-                    foreach ($this->runner->execute($command, null, $finalEnv) as $output) {
-                         yield ['event' => 'log', 'data' => [
-                             'job' => $jobId,
-                             'step' => $index,
-                             'type' => $output['type'], 
-                             'content' => $output['content']
-                         ]];
-                    }
-                    
-                    $duration = microtime(true) - $startTime;
-                    yield ['event' => 'step_success', 'data' => [
-                        'job' => $jobId,
-                        'step' => $index, 
-                        'duration' => $duration
-                    ]];
-
-                } catch (FluxException $e) {
-                    yield ['event' => 'step_failure', 'data' => [
-                        'job' => $jobId,
-                        'step' => $index, 
-                        'message' => $e->getMessage(),
-                    ]];
-                    
-                    yield ['event' => 'job_failure', 'data' => ['id' => $jobId]];
-                    yield ['event' => 'workflow_failed', 'data' => ['message' => "Job '$jobName' failed."]];
-                    return; // Stop workflow
+            // Dependency check
+            foreach ($job->getNeeds() as $needed) {
+                if (!in_array($needed, $completedJobs, true)) {
+                    yield $this->event('job_skipped', [
+                        'id'     => $jobId,
+                        'name'   => $job->getName(),
+                        'reason' => "Dependency '$needed' did not succeed.",
+                    ]);
+                    continue 2;
                 }
             }
-            
-            yield ['event' => 'job_success', 'data' => ['id' => $jobId]];
+
+            yield $this->event('job_start', [
+                'id'              => $jobId,
+                'name'            => $job->getName(),
+                'pre_step_count'  => count($job->getPreSteps()),
+                'step_count'      => count($job->getSteps()),
+                'post_step_count' => count($job->getPostSteps()),
+            ]);
+
+            $jobFailed = false;
+
+            // ── Pre steps ─────────────────────────────────────────────────
+            foreach ($job->getPreSteps() as $index => $step) {
+                $stepKey  = "pre-$index";
+                $failed   = false;
+
+                foreach ($this->runStep($jobId, $stepKey, $step, $job, 'pre') as $event) {
+                    yield $event;
+                    if ($event['event'] === 'step_failure' && !$step->isContinueOnError()) {
+                        $failed = true;
+                    }
+                }
+
+                if ($failed) {
+                    $jobFailed = true;
+                    break; // Stop remaining pre steps; skip main steps; post will still run
+                }
+            }
+
+            // ── Main steps (skipped if pre failed) ────────────────────────
+            if (!$jobFailed) {
+                foreach ($job->getSteps() as $index => $step) {
+                    $stepKey = (string) $index;
+                    $failed  = false;
+
+                    foreach ($this->runStep($jobId, $stepKey, $step, $job, 'main') as $event) {
+                        yield $event;
+                        if ($event['event'] === 'step_failure' && !$step->isContinueOnError()) {
+                            $failed = true;
+                        }
+                    }
+
+                    if ($failed) {
+                        $jobFailed = true;
+                        break;
+                    }
+                }
+            }
+
+            // ── Post steps (ALWAYS run) ────────────────────────────────────
+            foreach ($job->getPostSteps() as $index => $step) {
+                $stepKey = "post-$index";
+                foreach ($this->runStep($jobId, $stepKey, $step, $job, 'post') as $event) {
+                    yield $event;
+                    // Post step failures are logged but don't change job status
+                }
+            }
+
+            // ── Job outcome ───────────────────────────────────────────────
+            if ($jobFailed) {
+                yield $this->event('job_failure', ['id' => $jobId]);
+                yield $this->event('workflow_failed', [
+                    'message' => "Job '{$job->getName()}' failed.",
+                ]);
+                return;
+            }
+
+            $completedJobs[] = $jobId;
+            yield $this->event('job_success', ['id' => $jobId, 'name' => $job->getName()]);
         }
 
-        yield ['event' => 'workflow_complete', 'data' => []];
+        yield $this->event('workflow_complete', []);
+    }
+
+    /** @return \Generator<array> */
+    private function runStep(string $jobId, string $stepKey, Step $step, Job $job, string $phase): \Generator
+    {
+        if ($step->getCommand() === null) {
+            yield $this->event('step_skipped', [
+                'job'    => $jobId,
+                'step'   => $stepKey,
+                'phase'  => $phase,
+                'name'   => $step->getName(),
+                'reason' => 'No run command defined.',
+            ]);
+            return;
+        }
+
+        $env = array_merge(
+            $this->buildBaseEnv(),
+            $this->globalEnv,
+            $job->getEnv(),
+            $step->getEnv(),
+        );
+
+        yield $this->event('step_start', [
+            'job'   => $jobId,
+            'step'  => $stepKey,
+            'phase' => $phase,
+            'name'  => $step->getName(),
+        ]);
+
+        // Show the command as the first log line
+        yield $this->event('log', [
+            'job'     => $jobId,
+            'step'    => $stepKey,
+            'phase'   => $phase,
+            'type'    => 'cmd',
+            'content' => $step->getCommand(),
+        ]);
+
+        $start = hrtime(true);
+
+        try {
+            foreach ($this->runner->execute($step->getCommand(), $step->getWorkingDir(), $env) as $out) {
+                yield $this->event('log', [
+                    'job'     => $jobId,
+                    'step'    => $stepKey,
+                    'phase'   => $phase,
+                    'type'    => $out['type'],
+                    'content' => $out['content'],
+                ]);
+            }
+
+            yield $this->event('step_success', [
+                'job'      => $jobId,
+                'step'     => $stepKey,
+                'phase'    => $phase,
+                'duration' => round((hrtime(true) - $start) / 1e9, 2),
+            ]);
+
+        } catch (FluxException $e) {
+            yield $this->event('step_failure', [
+                'job'     => $jobId,
+                'step'    => $stepKey,
+                'phase'   => $phase,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function event(string $type, array $data): array
+    {
+        return ['event' => $type, 'data' => $data, 'ts' => time()];
+    }
+
+    private function buildBaseEnv(): array
+    {
+        $phpDir = dirname(PHP_BINARY);
+        $path   = getenv('PATH') ?: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+
+        return [
+            'PATH'                => $phpDir . PATH_SEPARATOR . $path,
+            'PHP_BINARY'          => PHP_BINARY,
+            'TERM'                => 'xterm-256color',
+            'ANSIBLE_FORCE_COLOR' => '1',
+            'FORCE_COLOR'         => '1',
+        ];
     }
 }

@@ -1,58 +1,734 @@
-name: Complex CI Pipeline
-description: Demonstrates jobs, dependencies and parallel structure imitation
+name: Full CI/CD Pipeline — Stress Test
+
+# ─────────────────────────────────────────────────────────────────────────────
+# This workflow deliberately exercises every Flux feature:
+#   - Pre/post cleanup steps on every job
+#   - Job dependencies (needs:)
+#   - continue-on-error on individual steps
+#   - High line-volume output (ANSI colours, line numbers, timestamps)
+#   - Long-running steps (sleep) to test live streaming
+#   - Stderr output mixed with stdout
+#   - A step that intentionally fails (continue-on-error: true)
+#   - Real shell: loops, seq, awk, python3, find, mktemp, dd
+#   - Carriage-return progress bars (\r overwriting)
+# ─────────────────────────────────────────────────────────────────────────────
+
+env:
+  CI: "true"
+  APP_ENV: testing
+  BUILD_ID: stress-001
 
 jobs:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 1 — Environment check
+  # ═══════════════════════════════════════════════════════════════════════════
+  environment:
+    name: Environment Check
+    pre:
+      - name: Create workspace
+        run: |
+          WORKSPACE=$(mktemp -d /tmp/flux-stress-XXXXXX)
+          echo "WORKSPACE=$WORKSPACE" > /tmp/flux-stress-env
+          printf '\033[36mWorkspace:\033[0m %s\n' "$WORKSPACE"
+
+    steps:
+      - name: System info
+        run: |
+          printf '\033[1mOS:\033[0m         %s\n' "$(uname -srm)"
+          printf '\033[1mBash:\033[0m       %s\n' "${BASH_VERSION}"
+          printf '\033[1mCPUs:\033[0m       %s\n' "$(nproc 2>/dev/null || echo 'unknown')"
+          printf '\033[1mMemory:\033[0m     %s\n' "$(free -h 2>/dev/null | awk '/^Mem:/{print $2}' || echo 'unknown')"
+          printf '\033[1mDisk:\033[0m       %s\n' "$(df -h / 2>/dev/null | awk 'NR==2{print $4}' || echo 'unknown') free"
+          printf '\033[1mPython:\033[0m     %s\n' "$(python3 --version 2>&1)"
+          printf '\033[1mDate:\033[0m       %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+      - name: Dependency check
+        run: |
+          TOOLS="bash awk grep find seq wc python3 mktemp dd"
+          ALL_OK=true
+          for tool in $TOOLS; do
+            path=$(which "$tool" 2>/dev/null)
+            if [ -n "$path" ]; then
+              printf '  \033[32m✓\033[0m %-12s %s\n' "$tool" "$path"
+            else
+              printf '  \033[31m✗\033[0m %-12s NOT FOUND\n' "$tool"
+              ALL_OK=false
+            fi
+          done
+          if [ "$ALL_OK" = false ]; then
+            echo "One or more required tools are missing." >&2
+            exit 1
+          fi
+          printf '\n\033[32mAll dependencies satisfied.\033[0m\n'
+
+      - name: Environment variables
+        run: |
+          printf '\033[1mCI:\033[0m         %s\n' "${CI:-unset}"
+          printf '\033[1mAPP_ENV:\033[0m    %s\n' "${APP_ENV:-unset}"
+          printf '\033[1mBUILD_ID:\033[0m   %s\n' "${BUILD_ID:-unset}"
+          printf '\033[1mPATH:\033[0m       %s\n' "${PATH}"
+
+    post:
+      - name: Record start time
+        run: |
+          START=$(date +%s)
+          echo "start_ts=$START" >> /tmp/flux-stress-env
+          printf '\033[36mBuild started at:\033[0m %s\n' "$(date -u '+%H:%M:%S UTC')"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 2 — Code analysis (high line volume, real file scanning)
+  # ═══════════════════════════════════════════════════════════════════════════
   lint:
     name: Lint & Static Analysis
-    steps:
-      - name: Checkout Code
-        run: echo "Checking out code..."
-      - name: Delay Checkout
-        run: sleep 1
-      - name: PHP CS Fixer
-        run: echo "Running PHP CS Fixer..."
-      - name: CS Fixer Delay
-        run: sleep 2
-      - name: CS Fixer Success
-        run: echo "Style ok."
-      - name: PHPStan
-        run: echo "Running PHPStan..."
-      - name: PHPStan Delay
-        run: sleep 2
-      - name: PHPStan Complete
-        run: echo "Analysis complete."
+    needs: environment
 
+    pre:
+      - name: Set up lint workspace
+        run: |
+          source /tmp/flux-stress-env 2>/dev/null || WORKSPACE=$(mktemp -d)
+          LINT_DIR="$WORKSPACE/src"
+          mkdir -p "$LINT_DIR"
+          # Create fake PHP source files to scan
+          for i in $(seq 1 24); do
+            cat > "$LINT_DIR/Class${i}.php" << PHPEOF
+<?php
+namespace App\Services;
+
+class Class${i} {
+    public function handle(): void {}
+}
+PHPEOF
+          done
+          echo "lint_dir=$LINT_DIR" >> /tmp/flux-stress-env
+          printf '\033[36mCreated %d source files for analysis\033[0m\n' "$(find "$LINT_DIR" -name '*.php' | wc -l)"
+
+    steps:
+      - name: PHP CS Fixer — check style
+        run: |
+          source /tmp/flux-stress-env 2>/dev/null
+          printf '\033[1mRunning PHP CS Fixer (dry-run)...\033[0m\n\n'
+          FILES=$(find "${lint_dir:-/tmp}" -name '*.php' 2>/dev/null)
+          COUNT=0
+          TOTAL=$(echo "$FILES" | wc -l)
+          while IFS= read -r f; do
+            COUNT=$((COUNT + 1))
+            # Simulate: most files pass, a few have style issues
+            if [ $((COUNT % 7)) -eq 0 ]; then
+              printf '   \033[33mWARN\033[0m %s — trailing whitespace on line %d\n' \
+                "$(basename "$f")" "$((RANDOM % 50 + 1))"
+            else
+              printf '   \033[32mOK\033[0m   %s\n' "$(basename "$f")"
+            fi
+            sleep 0.05
+          done <<< "$FILES"
+          printf '\n\033[32mChecked %d files.\033[0m %d style warnings (non-blocking).\n' \
+            "$TOTAL" "$(echo "$FILES" | grep -c . || echo 0)"
+
+      - name: PHPStan — static analysis
+        run: |
+          source /tmp/flux-stress-env 2>/dev/null
+          printf '\033[1mPHPStan Level 8 analysis\033[0m\n\n'
+          FILES=$(find "${lint_dir:-/tmp}" -name '*.php' 2>/dev/null)
+          ERRORS=0
+          while IFS= read -r f; do
+            if [ $((RANDOM % 9)) -eq 0 ]; then
+              LINE=$((RANDOM % 20 + 5))
+              printf ' \033[31m--\033[0m %s:%d\n' "$(basename "$f")" "$LINE"
+              printf '    \033[33m↳\033[0m Method return type not specified\n'
+              ERRORS=$((ERRORS + 1))
+            fi
+            sleep 0.03
+          done <<< "$FILES"
+          if [ $ERRORS -gt 0 ]; then
+            printf '\n\033[33m[Found %d errors — ignoring (demo mode)]\033[0m\n' "$ERRORS"
+          else
+            printf '\n\033[32m [OK] No errors\033[0m\n'
+          fi
+
+      - name: Check for TODO/FIXME comments
+        run: |
+          source /tmp/flux-stress-env 2>/dev/null
+          printf 'Scanning for leftover TODO/FIXME annotations...\n'
+          FOUND=0
+          for i in $(seq 1 5); do
+            echo "  // TODO: Remove this before release (Class$((i*3)).php:$((i*4)))" >&2
+            FOUND=$((FOUND+1))
+          done
+          printf '\n\033[33m⚠ Found %d TODO/FIXME annotations\033[0m\n' "$FOUND"
+          printf '  These are warnings only and will not block the build.\n'
+        continue-on-error: true
+
+      - name: Dependency audit
+        run: |
+          printf '\033[1mAuditing dependencies for known vulnerabilities...\033[0m\n\n'
+          PACKAGES=("symfony/yaml:7.1.0" "psr/log:3.0.0" "monolog/monolog:3.5.0"
+                    "doctrine/orm:2.17.0" "guzzlehttp/guzzle:7.8.1" "ramsey/uuid:4.7.4"
+                    "brick/math:0.11.0" "phpdocumentor/reflection:5.3.0")
+          for pkg in "${PACKAGES[@]}"; do
+            name="${pkg%%:*}"
+            version="${pkg##*:}"
+            sleep 0.08
+            printf '  \033[32m✓\033[0m  %-40s \033[2m%s\033[0m\n' "$name" "$version"
+          done
+          printf '\n\033[32mNo known vulnerabilities found.\033[0m\n'
+
+    post:
+      - name: Archive lint reports
+        run: |
+          printf '\033[36mArchiving lint output...\033[0m\n'
+          echo "lint_ok=true" >> /tmp/flux-stress-env
+          printf '\033[32mDone.\033[0m\n'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 3 — Test suite (simulates a real PHPUnit run with ANSI output)
+  # ═══════════════════════════════════════════════════════════════════════════
   test:
-    name: Unit Tests
+    name: Test Suite
     needs: lint
-    steps:
-      - name: Bootstrap
-        run: echo "Bootstrapping test env..."
-      - name: Bootstrap Delay
-        run: sleep 1
-      - name: PHPUnit Suite 1
-        run: |
-           echo "Running Suite 1..."
-           echo "Test A: \033[32mPASS\033[0m"
-           echo "Test B: \033[32mPASS\033[0m"
-           sleep 2
-      - name: PHPUnit Suite 2
-        run: |
-           echo "Running Suite 2..."
-           echo "Test C: \033[32mPASS\033[0m"
-           sleep 1
 
+    pre:
+      - name: Seed test database
+        run: |
+          printf '\033[36mSeeding test database...\033[0m\n'
+          for table in users orders products payments shipments; do
+            rows=$((RANDOM % 900 + 100))
+            printf '  Inserting %d rows into \033[1m%s\033[0m... ' "$rows" "$table"
+            sleep 0.1
+            printf '\033[32mOK\033[0m\n'
+          done
+          printf '\033[32mDatabase ready.\033[0m\n'
+
+      - name: Start test cache
+        run: |
+          printf 'Warming Redis cache... '
+          sleep 0.2
+          printf '\033[32mOK\033[0m\n'
+
+    steps:
+      - name: Unit tests — Models
+        run: |
+          printf '\033[1mPHPUnit 11.0 — Unit Tests (Models)\033[0m\n'
+          printf 'Runtime: PHP 8.3 | Config: phpunit.unit.xml\n\n'
+          SUITES=("UserModelTest" "OrderModelTest" "ProductModelTest"
+                  "PaymentModelTest" "AddressModelTest" "CategoryModelTest"
+                  "InvoiceModelTest" "ShipmentModelTest" "ReviewModelTest"
+                  "CouponModelTest")
+          PASS=0
+          for suite in "${SUITES[@]}"; do
+            COUNT=$((RANDOM % 15 + 5))
+            for i in $(seq 1 $COUNT); do
+              printf '.'
+              sleep 0.02
+            done
+            PASS=$((PASS + COUNT))
+          done
+          printf '\n\n'
+          printf 'Time: 00:%02d.%03d, Memory: %.2f MB\n' \
+            "$((RANDOM % 10 + 5))" "$((RANDOM % 999))" "$(echo "scale=2; $((RANDOM % 20 + 8)) + 0.$((RANDOM % 99))" | bc 2>/dev/null || echo 14.40)"
+          printf '\n\033[32mOK (%d tests, %d assertions)\033[0m\n' "$PASS" "$((PASS * 3))"
+
+      - name: Unit tests — Services
+        run: |
+          printf '\033[1mPHPUnit 11.0 — Unit Tests (Services)\033[0m\n\n'
+          TESTS=("AuthServiceTest::testLogin" "AuthServiceTest::testLogout"
+                 "AuthServiceTest::testRefreshToken" "PaymentServiceTest::testCharge"
+                 "PaymentServiceTest::testRefund" "PaymentServiceTest::testWebhook"
+                 "EmailServiceTest::testSend" "EmailServiceTest::testQueue"
+                 "CacheServiceTest::testGet" "CacheServiceTest::testSet"
+                 "CacheServiceTest::testInvalidate" "QueueServiceTest::testDispatch"
+                 "QueueServiceTest::testRetry" "SearchServiceTest::testIndex"
+                 "SearchServiceTest::testQuery")
+          PASS=0; FAIL=0
+          for test in "${TESTS[@]}"; do
+            sleep 0.06
+            # Simulate one intentional failure with continue-on-error
+            if [ "$test" = "CacheServiceTest::testInvalidate" ]; then
+              printf '  \033[31mF\033[0m  %s\n' "$test"
+              printf '      \033[31m↳ Cache miss after invalidation (known flaky test)\033[0m\n'
+              FAIL=$((FAIL+1))
+            else
+              printf '  \033[32m✓\033[0m  %s\n' "$test"
+              PASS=$((PASS+1))
+            fi
+          done
+          printf '\n'
+          printf '\033[1mResults:\033[0m \033[32m%d passed\033[0m, \033[31m%d failed\033[0m (flaky — ignored)\n' \
+            "$PASS" "$FAIL"
+        continue-on-error: true
+
+      - name: Integration tests
+        run: |
+          printf '\033[1mPHPUnit 11.0 — Integration Tests\033[0m\n\n'
+          GROUPS=("API" "Auth" "Checkout" "Webhooks" "Search")
+          TOTAL_PASS=0
+          for group in "${GROUPS[@]}"; do
+            COUNT=$((RANDOM % 20 + 10))
+            printf '\033[36m  ► %s\033[0m (%d tests)\n' "$group" "$COUNT"
+            for i in $(seq 1 $COUNT); do
+              printf '.'
+              sleep 0.03
+            done
+            printf ' \033[32m✓\033[0m\n'
+            TOTAL_PASS=$((TOTAL_PASS + COUNT))
+          done
+          DURATION="00:$(printf '%02d' $((RANDOM % 20 + 15))).$(printf '%03d' $((RANDOM % 999)))"
+          printf '\nTime: %s, Memory: 32.00 MB\n' "$DURATION"
+          printf '\n\033[32mOK (%d tests, %d assertions)\033[0m\n' \
+            "$TOTAL_PASS" "$((TOTAL_PASS * 4))"
+
+      - name: Code coverage report
+        run: |
+          printf '\033[1mGenerating coverage report...\033[0m\n\n'
+          COMPONENTS=("Models" "Services" "Controllers" "Middleware" "Repositories" "Events" "Jobs")
+          printf '  %-20s  %s\n' "Component" "Coverage"
+          printf '  %-20s  %s\n' "─────────────────────" "────────"
+          for comp in "${COMPONENTS[@]}"; do
+            pct=$((RANDOM % 30 + 70))
+            bar_full=$((pct / 5))
+            bar_empty=$((20 - bar_full))
+            bar=$(printf '█%.0s' $(seq 1 $bar_full))
+            space=$(printf '░%.0s' $(seq 1 $bar_empty))
+            if [ $pct -ge 90 ]; then
+              colour='\033[32m'
+            elif [ $pct -ge 75 ]; then
+              colour='\033[33m'
+            else
+              colour='\033[31m'
+            fi
+            printf "  %-20s  ${colour}%s%s\033[0m  %d%%\n" "$comp" "$bar" "$space" "$pct"
+            sleep 0.1
+          done
+          printf '\n\033[1mTotal coverage: \033[32m84.3%%\033[0m\n'
+
+    post:
+      - name: Destroy test database
+        run: |
+          printf 'Dropping test tables... '
+          sleep 0.1
+          printf '\033[32mOK\033[0m\n'
+          echo "test_ok=true" >> /tmp/flux-stress-env
+
+      - name: Upload coverage to reporting service
+        run: |
+          printf 'Uploading coverage report...\n'
+          # Simulate chunked upload
+          for chunk in $(seq 1 4); do
+            printf '  Uploading chunk %d/4... ' "$chunk"
+            sleep 0.15
+            printf '\033[32mOK\033[0m\n'
+          done
+          printf '\033[32mCoverage report available at:\033[0m https://coverage.example.com/builds/stress-001\n'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 4 — Build (high output volume, real file creation)
+  # ═══════════════════════════════════════════════════════════════════════════
   build:
     name: Build Artifacts
     needs: test
-    steps:
-      - name: Npm Install
-        run: echo "npm install"
-      - name: Npm Delay
-        run: sleep 2
-      - name: Webpack Build
+
+    pre:
+      - name: Verify build tools
         run: |
-           echo "Compiling assets..."
-           sleep 1
-           echo "736 modules transformed."
-           echo "\033[32mBuild Success!\033[0m"
+          printf 'Checking build environment...\n'
+          for tool in find awk python3 dd; do
+            printf '  \033[36m%-10s\033[0m → %s\n' "$tool" "$(which $tool)"
+          done
+
+    steps:
+      - name: Compile assets — JavaScript
+        run: |
+          printf '\033[1mvite v5.2.0\033[0m building for production...\n\n'
+          MODULES=(
+            "react:18.3.1" "react-dom:18.3.1" "axios:1.6.8"
+            "zustand:4.5.2" "react-query:5.28.6" "react-router-dom:6.22.3"
+            "date-fns:3.6.0" "lodash-es:4.17.21" "classnames:2.5.1"
+            "framer-motion:11.0.22" "recharts:2.12.3" "zod:3.22.4"
+          )
+          printf 'transforming...\n'
+          TRANSFORMED=0
+          for pkg in "${MODULES[@]}"; do
+            name="${pkg%%:*}"
+            version="${pkg##*:}"
+            FILES=$((RANDOM % 40 + 10))
+            printf '  \033[2m%-30s\033[0m v%s — \033[32m%d modules\033[0m\n' "$name" "$version" "$FILES"
+            TRANSFORMED=$((TRANSFORMED + FILES))
+            sleep 0.06
+          done
+          printf '\n\033[1m%d modules transformed.\033[0m\n\n' "$TRANSFORMED"
+
+          # Output files
+          printf '  \033[32m%-45s\033[0m \033[1m%s kB\033[0m │ gzip: %s kB\n' \
+            "dist/assets/vendor-CX9mMaRj.js"  "821.42" "267.89"
+          printf '  \033[32m%-45s\033[0m \033[1m%s kB\033[0m │ gzip: %s kB\n' \
+            "dist/assets/app-Bx3kQ2p.js"      "142.40" "44.32"
+          printf '  \033[32m%-45s\033[0m \033[1m%s kB\033[0m │ gzip: %s kB\n' \
+            "dist/assets/style-BdUF1q2.css"   "18.61"  "4.91"
+          printf '\n\033[32m✓ Built in 4.21s\033[0m\n'
+
+      - name: Compile assets — CSS / Tailwind
+        run: |
+          printf '\033[1mTailwind CSS v3.4.3\033[0m\n\n'
+          printf 'Scanning template files...\n'
+          for i in $(seq 1 6); do
+            printf '  \033[2m%d classes detected in template batch %d\033[0m\n' \
+              "$((RANDOM % 200 + 50))" "$i"
+            sleep 0.08
+          done
+          TOTAL_CLASSES=$((RANDOM % 800 + 1200))
+          printf '\n  \033[1mTotal utility classes found:\033[0m %d\n' "$TOTAL_CLASSES"
+          printf '  Generating optimized stylesheet...\n'
+          sleep 0.3
+          printf '\n  \033[32mOutput:\033[0m dist/app.css  \033[1m24.8 kB\033[0m (from 3.8 MB)\n'
+          printf '  \033[32m✓ Purge removed %.1f%% of unused CSS\033[0m\n' \
+            "$(echo "scale=1; 100 - 24.8/3800*100" | bc 2>/dev/null || echo '99.3')"
+
+      - name: Generate API documentation
+        run: |
+          printf '\033[1mGenerating OpenAPI 3.1 spec...\033[0m\n\n'
+          ENDPOINTS=(
+            "GET    /api/v1/users" "POST   /api/v1/users" "GET    /api/v1/users/{id}"
+            "PUT    /api/v1/users/{id}" "DELETE /api/v1/users/{id}"
+            "GET    /api/v1/orders" "POST   /api/v1/orders" "GET    /api/v1/orders/{id}"
+            "POST   /api/v1/orders/{id}/cancel" "POST   /api/v1/orders/{id}/refund"
+            "GET    /api/v1/products" "POST   /api/v1/products" "GET    /api/v1/products/{id}"
+            "GET    /api/v1/payments" "POST   /api/v1/payments/charge"
+            "POST   /api/v1/auth/login" "POST   /api/v1/auth/logout"
+            "POST   /api/v1/auth/refresh" "GET    /api/v1/profile"
+          )
+          for ep in "${ENDPOINTS[@]}"; do
+            printf '  \033[36mdocumenting\033[0m  %s\n' "$ep"
+            sleep 0.04
+          done
+          printf '\n  \033[32m✓ %d endpoints documented\033[0m\n' "${#ENDPOINTS[@]}"
+          printf '  \033[32m✓ Wrote dist/openapi.json (84.2 kB)\033[0m\n'
+
+      - name: Create release archive
+        run: |
+          printf '\033[1mCreating release tarball...\033[0m\n\n'
+          source /tmp/flux-stress-env 2>/dev/null
+          BUILD_DIR="${WORKSPACE:-$(mktemp -d)}/build"
+          mkdir -p "$BUILD_DIR"
+
+          # Create fake build artifacts
+          for f in app.js vendor.js app.css openapi.json manifest.json; do
+            dd if=/dev/urandom bs=1024 count=$((RANDOM % 500 + 50)) \
+              of="$BUILD_DIR/$f" 2>/dev/null
+            SIZE=$(wc -c < "$BUILD_DIR/$f")
+            printf '  adding: \033[2m%-30s\033[0m %s bytes\n' "$f" "$SIZE"
+          done
+
+          TOTAL=$(du -sh "$BUILD_DIR" 2>/dev/null | cut -f1 || echo '~2.4M')
+          printf '\n  \033[32mArchive size: %s\033[0m\n' "$TOTAL"
+          printf '  \033[32mSHA256: %s\033[0m\n' "$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | xxd -p -c 64 | head -c 64)"
+          echo "build_dir=$BUILD_DIR" >> /tmp/flux-stress-env
+
+      - name: Docker image build
+        run: |
+          printf '\033[1mBuilding Docker image: myapp:stress-001\033[0m\n\n'
+          STEPS=(
+            "FROM php:8.3-fpm-alpine"
+            "RUN apk add --no-cache bash curl git"
+            "COPY composer.json composer.lock ."
+            "RUN composer install --no-dev --optimize-autoloader"
+            "COPY . ."
+            "RUN chown -R www-data:www-data /var/www"
+            "EXPOSE 9000"
+            "CMD [\"php-fpm\"]"
+          )
+          STEP_NUM=1
+          for instruction in "${STEPS[@]}"; do
+            printf ' \033[2mStep %d/%d :\033[0m %s\n' \
+              "$STEP_NUM" "${#STEPS[@]}" "$instruction"
+            # Simulate layer caching
+            if [ $STEP_NUM -le 2 ]; then
+              printf '  \033[2m---> Using cache\033[0m\n'
+              sleep 0.05
+            else
+              printf '  \033[2m---> Running...\033[0m\n'
+              sleep 0.3
+            fi
+            LAYER_HASH=$(dd if=/dev/urandom bs=12 count=1 2>/dev/null | xxd -p | head -c 12)
+            printf '  \033[2m---> %s\033[0m\n' "$LAYER_HASH"
+            STEP_NUM=$((STEP_NUM+1))
+          done
+          printf '\n\033[32mSuccessfully built\033[0m \033[1m4a9f8c2b1e7d\033[0m\n'
+          printf '\033[32mSuccessfully tagged\033[0m myapp:stress-001\n'
+          printf '\033[32mSuccessfully tagged\033[0m myapp:latest\n'
+
+    post:
+      - name: Clean build workspace
+        run: |
+          source /tmp/flux-stress-env 2>/dev/null
+          if [ -n "$WORKSPACE" ] && [ -d "$WORKSPACE" ]; then
+            SIZE=$(du -sh "$WORKSPACE" 2>/dev/null | cut -f1 || echo '?')
+            printf 'Removing workspace (%s)... ' "$SIZE"
+            rm -rf "$WORKSPACE"
+            printf '\033[32mOK\033[0m\n'
+          else
+            printf '\033[33mWorkspace not found — already cleaned\033[0m\n'
+          fi
+
+      - name: Publish build metrics
+        run: |
+          source /tmp/flux-stress-env 2>/dev/null
+          START="${start_ts:-$(date +%s)}"
+          NOW=$(date +%s)
+          ELAPSED=$((NOW - START))
+          printf '\033[1mBuild Summary\033[0m\n'
+          printf '─────────────────────────────\n'
+          printf '  Status:    \033[32mPASS\033[0m\n'
+          printf '  Build ID:  %s\n' "${BUILD_ID:-unknown}"
+          printf '  Duration:  %ds\n' "$ELAPSED"
+          printf '  Artifacts: 5 files\n'
+          printf '  Coverage:  84.3%%\n'
+          printf '─────────────────────────────\n'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 5 — Security scan (runs against build artifacts)
+  # ═══════════════════════════════════════════════════════════════════════════
+  security:
+    name: Security Scan
+    needs: build
+
+    pre:
+      - name: Initialize scanner
+        run: |
+          printf '\033[1mTrivy Security Scanner v0.50.1\033[0m\n'
+          printf 'Loading vulnerability database... '
+          sleep 0.4
+          printf '\033[32mOK\033[0m (updated 2 hours ago)\n'
+
+    steps:
+      - name: Scan OS packages
+        run: |
+          printf '\033[1mScanning OS layer (alpine:3.19)...\033[0m\n\n'
+          PACKAGES=("musl:1.2.4" "openssl:3.1.4" "libcrypto3:3.1.4"
+                    "libssl3:3.1.4" "zlib:1.3.1" "curl:8.5.0"
+                    "ca-certificates:20230506" "tzdata:2024a")
+          for pkg in "${PACKAGES[@]}"; do
+            name="${pkg%%:*}"
+            version="${pkg##*:}"
+            sleep 0.07
+            printf '  \033[32m%-25s %s\033[2m  — no known CVEs\033[0m\n' "$name" "$version"
+          done
+          printf '\n\033[32m✓ OS packages: 0 vulnerabilities\033[0m\n'
+
+      - name: Scan application dependencies
+        run: |
+          printf '\033[1mScanning PHP dependencies (composer.lock)...\033[0m\n\n'
+
+          # A few fake CVEs mixed in — non-critical, flagged but not blocking
+          VULN_PKGS=("twig/twig:3.8.0:CVE-2024-51754:LOW" )
+          SAFE_PKGS=("symfony/yaml:7.1.0" "symfony/http-foundation:7.1.0"
+                     "symfony/routing:7.1.0" "doctrine/orm:2.17.0"
+                     "guzzlehttp/guzzle:7.8.1" "ramsey/uuid:4.7.4"
+                     "brick/math:0.11.0" "monolog/monolog:3.5.0"
+                     "league/flysystem:3.25.1" "psr/log:3.0.0"
+                     "psr/cache:3.0.0" "psr/event-dispatcher:1.0.0")
+
+          for pkg in "${SAFE_PKGS[@]}"; do
+            name="${pkg%%:*}"
+            version="${pkg##*:}"
+            sleep 0.04
+            printf '  \033[32m✓\033[0m  %-40s %s\n' "$name" "$version"
+          done
+
+          for entry in "${VULN_PKGS[@]}"; do
+            IFS=':' read -r name version cve severity <<< "$entry"
+            sleep 0.08
+            printf '  \033[33m⚠\033[0m  %-30s %s\n' "$name" "$version"
+            printf '       \033[33m%s (%s)\033[0m — XSS via template injection\n' "$cve" "$severity"
+            printf '       \033[2mFix: upgrade to >= 3.8.1\033[0m\n'
+          done
+
+          printf '\n\033[33mResult: 1 LOW vulnerability found.\033[0m\n'
+          printf '\033[2mLOW severity does not block deployment.\033[0m\n'
+        continue-on-error: true
+
+      - name: Scan Docker image
+        run: |
+          printf '\033[1mScanning Docker image: myapp:stress-001\033[0m\n\n'
+          printf 'Pulling image layers... '
+          sleep 0.5
+          printf '\033[32mOK\033[0m\n\n'
+
+          LAYERS=("4a9f8c2b1e7d" "8d3f2a1c9e5b" "2b7f4d8a6c1e" "6e1c9b3f7a2d")
+          for layer in "${LAYERS[@]}"; do
+            printf '  \033[2mLayer %s ...\033[0m ' "$layer"
+            sleep 0.2
+            printf '\033[32mclean\033[0m\n'
+          done
+
+          printf '\n\033[32m✓ Image scan complete: 0 HIGH/CRITICAL vulnerabilities\033[0m\n'
+          printf '  Total: 0 CRITICAL, 0 HIGH, 0 MEDIUM, 1 LOW\n'
+
+      - name: SAST — source code scan
+        run: |
+          printf '\033[1mSemgrep SAST scan (ruleset: php.security)\033[0m\n\n'
+          RULES=("sql-injection" "path-traversal" "xss-via-dom"
+                 "insecure-deserialization" "hardcoded-credentials"
+                 "weak-crypto" "open-redirect" "xxe-injection")
+          for rule in "${RULES[@]}"; do
+            printf '  \033[36mChecking:\033[0m %-35s' "$rule"
+            sleep 0.12
+            printf '\033[32mpassed\033[0m\n'
+          done
+          printf '\n\033[32m✓ SAST: no issues found\033[0m\n'
+
+    post:
+      - name: Generate security report
+        run: |
+          printf '\033[36mSaving security report...\033[0m\n'
+          python3 << PYEOF
+import json, datetime
+
+report = {
+    "scan_id": "stress-001",
+    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+    "image": "myapp:stress-001",
+    "summary": {
+        "CRITICAL": 0,
+        "HIGH": 0,
+        "MEDIUM": 0,
+        "LOW": 1
+    },
+    "vulnerabilities": [
+        {
+            "package": "twig/twig",
+            "installed_version": "3.8.0",
+            "fixed_version": "3.8.1",
+            "cve": "CVE-2024-51754",
+            "severity": "LOW",
+            "description": "XSS via template injection in sandbox mode"
+        }
+    ],
+    "status": "PASS"
+}
+
+print(json.dumps(report, indent=2))
+PYEOF
+          printf '\n\033[32mReport saved.\033[0m\n'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 6 — Deploy (final job, tests post-step on success path)
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: Deploy to Staging
+    needs: security
+
+    pre:
+      - name: Acquire deployment lock
+        run: |
+          LOCK_FILE=/tmp/flux-deploy-lock
+          if [ -f "$LOCK_FILE" ]; then
+            printf '\033[31mAnother deployment is in progress!\033[0m\n' >&2
+            exit 1
+          fi
+          touch "$LOCK_FILE"
+          printf '\033[32mDeployment lock acquired.\033[0m\n'
+
+      - name: Notify deployment start
+        run: |
+          printf '\033[36mPosting deployment start to Slack...\033[0m\n'
+          sleep 0.2
+          printf '  → #deployments: \033[1m[DEPLOY]\033[0m stress-001 → staging (started by CI)\n'
+
+    steps:
+      - name: Push Docker image
+        run: |
+          printf '\033[1mPushing to registry.example.com...\033[0m\n\n'
+          LAYERS=("sha256:4a9f8c2b" "sha256:8d3f2a1c" "sha256:2b7f4d8a"
+                  "sha256:6e1c9b3f" "sha256:9a4d7c2e" "sha256:1f8b3e7a")
+          for layer in "${LAYERS[@]}"; do
+            SIZE=$((RANDOM % 50 + 5))
+            printf '  Pushing layer %s  \033[2m%dMB\033[0m\n' "$layer" "$SIZE"
+            # Simulate upload progress with \r
+            for pct in 25 50 75 100; do
+              printf '\r    [\033[34m%3d%%\033[0m] uploading...' "$pct"
+              sleep 0.1
+            done
+            printf '\r    \033[32m[done]\033[0m %-40s\n' ""
+          done
+          printf '\n\033[32mDigest: sha256:7f3a9b2d4c8e1f6a...\033[0m\n'
+          printf '\033[32mPush complete.\033[0m\n'
+
+      - name: Update Kubernetes deployment
+        run: |
+          printf '\033[1mApplying manifests to cluster: staging-eu-west-1\033[0m\n\n'
+          RESOURCES=("deployment/api" "deployment/worker" "deployment/scheduler"
+                     "service/api" "configmap/app-config" "hpa/api")
+          for res in "${RESOURCES[@]}"; do
+            printf '  \033[36mconfigured\033[0m  %s\n' "$res"
+            sleep 0.15
+          done
+          printf '\n  Waiting for rollout...\n'
+          for i in $(seq 1 6); do
+            READY=$((i * 2 - 1))
+            DESIRED=12
+            printf '\r  Pods ready: \033[33m%d/%d\033[0m' "$READY" "$DESIRED"
+            sleep 0.4
+          done
+          printf '\r  Pods ready: \033[32m12/12\033[0m ✓\n'
+          printf '\n\033[32mRollout complete.\033[0m\n'
+
+      - name: Smoke tests
+        run: |
+          printf '\033[1mRunning post-deploy smoke tests...\033[0m\n\n'
+          CHECKS=(
+            "GET /health → 200 OK"
+            "GET /api/v1/status → 200 {\"status\":\"ok\"}"
+            "POST /api/v1/auth/login → 200 (token issued)"
+            "GET /api/v1/users → 200 (paginated)"
+            "GET /api/v1/products → 200 (24 items)"
+          )
+          for check in "${CHECKS[@]}"; do
+            printf '  \033[36m●\033[0m  %s ... ' "$check"
+            sleep 0.25
+            printf '\033[32mOK\033[0m\n'
+          done
+          printf '\n\033[32m✓ All smoke tests passed\033[0m\n'
+
+      - name: Run database migrations
+        run: |
+          printf '\033[1mRunning pending migrations...\033[0m\n\n'
+          MIGRATIONS=(
+            "2024_01_15_add_payment_status_index"
+            "2024_02_03_create_webhooks_table"
+            "2024_02_20_add_user_preferences_json"
+            "2024_03_08_create_audit_log_table"
+          )
+          for migration in "${MIGRATIONS[@]}"; do
+            printf '  \033[36mMigrating:\033[0m  %s\n' "$migration"
+            sleep 0.2
+            printf '  \033[32mMigrated!\033[0m   %s\n\n' "$migration"
+          done
+          printf '\033[32m✓ 4 migrations ran successfully.\033[0m\n'
+
+    post:
+      - name: Release deployment lock
+        run: |
+          rm -f /tmp/flux-deploy-lock
+          printf '\033[32mDeployment lock released.\033[0m\n'
+
+      - name: Notify deployment result
+        run: |
+          source /tmp/flux-stress-env 2>/dev/null
+          START="${start_ts:-$(date +%s)}"
+          TOTAL=$(($(date +%s) - START))
+          printf '\033[36mPosting deployment result...\033[0m\n'
+          sleep 0.2
+          printf '\n\033[1;32m╔══════════════════════════════════════════╗\033[0m\n'
+          printf '\033[1;32m║   ✓  Deployment Successful                ║\033[0m\n'
+          printf '\033[1;32m╠══════════════════════════════════════════╣\033[0m\n'
+          printf '\033[1;32m║\033[0m  Build:      %-28s\033[1;32m║\033[0m\n' "${BUILD_ID:-stress-001}"
+          printf '\033[1;32m║\033[0m  Target:     %-28s\033[1;32m║\033[0m\n' "staging-eu-west-1"
+          printf '\033[1;32m║\033[0m  Duration:   %-28s\033[1;32m║\033[0m\n' "${TOTAL}s total"
+          printf '\033[1;32m║\033[0m  Coverage:   %-28s\033[1;32m║\033[0m\n' "84.3%"
+          printf '\033[1;32m║\033[0m  Security:   %-28s\033[1;32m║\033[0m\n' "1 LOW (non-blocking)"
+          printf '\033[1;32m╚══════════════════════════════════════════╝\033[0m\n'
+
+      - name: Final cleanup
+        run: |
+          rm -f /tmp/flux-stress-env
+          printf '\033[2mTemporary files removed.\033[0m\n'

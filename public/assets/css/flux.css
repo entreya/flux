@@ -1,429 +1,452 @@
-/* GitHub Actions Exact Style */
-:root {
-    /* Fonts */
-    --flux-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-    --flux-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+/*
+ * flux.css — Theme variables + log viewer custom styles
+ *
+ * Bootstrap 5 handles layout, components, and utilities.
+ * This file ONLY overrides Bootstrap variables and adds styles
+ * that Bootstrap does not cover (log lines, step accordion, status icons).
+ *
+ * Theming is entirely CSS-custom-property driven — framework agnostic.
+ */
+
+/* ── GitHub-Dark theme overrides for Bootstrap 5 ────────────────────────── */
+[data-bs-theme="dark"] {
+  --bs-body-bg:           #0d1117;
+  --bs-body-color:        #e6edf3;
+  --bs-secondary-bg:      #161b22;
+  --bs-tertiary-bg:       #0d1117;
+  --bs-border-color:      #30363d;
+  --bs-border-color-translucent: rgba(48,54,61,.6);
+  --bs-secondary-color:   #8b949e;
+  --bs-emphasis-color:    #f0f6fc;
+  --bs-link-color:        #58a6ff;
+  --bs-code-color:        #d2a8ff;
+
+  /* Flux-specific tokens */
+  --flux-header-bg:       #161b22;
+  --flux-sidebar-bg:      #0d1117;
+  --flux-toolbar-bg:      #161b22;
+  --flux-step-bg:         #161b22;
+  --flux-step-hover-bg:   #1c2128;
+  --flux-log-bg:          #0d1117;
+  --flux-lineno-color:    #3d444d;
+  --flux-ts-color:        #3d444d;
+  --flux-cmd-color:       #6e7681;
+
+  /* Status colors (GitHub palette) */
+  --flux-success:         #3fb950;
+  --flux-success-subtle:  rgba(63,185,80,.15);
+  --flux-danger:          #f85149;
+  --flux-danger-subtle:   rgba(248,81,73,.15);
+  --flux-accent:          #58a6ff;
+  --flux-accent-subtle:   rgba(88,166,255,.15);
+  --flux-warning:         #d29922;
+  --flux-muted:           #484f58;
+
+  /* ANSI palette */
+  --ansi-black:      #484f58;  --ansi-red:       #ff7b72;
+  --ansi-green:      #3fb950;  --ansi-yellow:    #d29922;
+  --ansi-blue:       #58a6ff;  --ansi-magenta:   #bc8cff;
+  --ansi-cyan:       #39c5cf;  --ansi-white:     #b1bac4;
+  --ansi-br-black:   #6e7681;  --ansi-br-red:    #ffa198;
+  --ansi-br-green:   #56d364;  --ansi-br-yellow: #e3b341;
+  --ansi-br-blue:    #79c0ff;  --ansi-br-magenta:#d2a8ff;
+  --ansi-br-cyan:    #56d4dd;  --ansi-br-white:  #cdd9e5;
 }
 
-body {
-    background-color: var(--flux-bg);
-    color: var(--flux-text);
-    font-family: var(--flux-font-sans);
-    margin: 0;
-    padding: 0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    font-size: 14px;
-    line-height: 1.5;
+[data-bs-theme="light"] {
+  --flux-header-bg:       #f6f8fa;
+  --flux-sidebar-bg:      #f6f8fa;
+  --flux-toolbar-bg:      #f6f8fa;
+  --flux-step-bg:         #f6f8fa;
+  --flux-step-hover-bg:   #eef1f4;
+  --flux-log-bg:          #ffffff;
+  --flux-lineno-color:    #cfd6de;
+  --flux-ts-color:        #cfd6de;
+  --flux-cmd-color:       #57606a;
+
+  --flux-success:         #1a7f37;
+  --flux-success-subtle:  rgba(26,127,55,.12);
+  --flux-danger:          #cf222e;
+  --flux-danger-subtle:   rgba(207,34,46,.12);
+  --flux-accent:          #0969da;
+  --flux-accent-subtle:   rgba(9,105,218,.12);
+  --flux-warning:         #9a6700;
+  --flux-muted:           #afb8c1;
+
+  --ansi-black:      #24292f;  --ansi-red:       #cf222e;
+  --ansi-green:      #1a7f37;  --ansi-yellow:    #9a6700;
+  --ansi-blue:       #0969da;  --ansi-magenta:   #8250df;
+  --ansi-cyan:       #1b7c83;  --ansi-white:     #6e7681;
+  --ansi-br-black:   #57606a;  --ansi-br-red:    #a40e26;
+  --ansi-br-green:   #116329;  --ansi-br-yellow: #4d2d00;
+  --ansi-br-blue:    #0550ae;  --ansi-br-magenta:#6639ba;
+  --ansi-br-cyan:    #0550ae;  --ansi-br-white:  #8c959f;
 }
 
-/* Header */
+/* ── Layout shell ─────────────────────────────────────────────────────────── */
+html, body { height: 100%; overflow: hidden; }
+
 .flux-header {
-    background-color: var(--flux-header-bg);
-    border-bottom: 1px solid var(--flux-border);
-    padding: 16px 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
+  height: 49px;
+  flex-shrink: 0;
+  background: var(--flux-header-bg);
+  position: relative;
+  z-index: 100;
 }
 
-.flux-workflow-title {
-    font-weight: 600;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
+.flux-logo { color: var(--bs-body-color); }
+.flux-logo:hover { opacity: .8; }
 
-/* Status Badges */
-.flux-status-badge {
-    padding: 2px 10px;
-    border-radius: 100px;
-    font-size: 12px;
-    font-weight: 500;
-    border: 1px solid var(--flux-border);
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.flux-status-badge.running {
-    color: var(--flux-ansi-blue);
-    border-color: var(--flux-ansi-border);
-}
-
-.flux-status-badge.success {
-    color: var(--flux-success);
-    border-color: var(--flux-success);
-}
-
-.flux-status-badge.failure {
-    color: var(--flux-error);
-    border-color: var(--flux-error);
-}
-
-/* Layout */
 .flux-layout {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
+  display: flex;
+  height: calc(100vh - 49px);
+  overflow: hidden;
 }
 
-/* Sidebar */
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
 .flux-sidebar {
-    width: 320px;
-    background-color: var(--flux-sidebar);
-    border-right: 1px solid var(--flux-border);
-    overflow-y: auto;
-    flex-shrink: 0;
-    padding-top: 8px;
+  width: 256px;
+  min-width: 256px;
+  background: var(--flux-sidebar-bg);
+  overflow-y: auto;
+  flex-shrink: 0;
 }
 
-.flux-job-group {
-    border-bottom: none;
-    /* Removed separator for clean list */
+.flux-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--bs-secondary-color);
 }
 
-.flux-sidebar-header {
-    padding: 16px;
-    border-bottom: 1px solid var(--flux-border);
-    margin-bottom: 8px;
-}
+.flux-sidebar-empty { font-size: 12px; }
 
-.flux-filename {
-    font-family: var(--flux-font-mono);
-    font-size: 11px;
-    color: var(--flux-text-muted);
-    word-break: break-all;
-}
-
-.flux-job-title {
-    padding: 0;
-    pointer-events: none;
-    border: none;
-}
-
-.flux-job-title.active {
-    border-left: none;
-    background: none;
-}
-
-/* Reset previous attempt */
-
-/* Sidebar Pills */
+/* ── Job items ────────────────────────────────────────────────────────────── */
 .flux-job-item {
-    padding: 8px 12px;
-    margin: 4px 12px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: all 0.2s;
-    color: var(--flux-text-muted);
-    /* Faded by default */
-    font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bs-secondary-color);
+  transition: background .1s, color .1s;
+  margin-bottom: 1px;
 }
-
 .flux-job-item:hover {
-    background-color: rgba(255, 255, 255, 0.04);
-    color: var(--flux-text);
+  background: var(--bs-secondary-bg);
+  color: var(--bs-body-color);
+}
+.flux-job-item.is-active {
+  background: var(--flux-accent-subtle);
+  border-color: var(--flux-accent);
+  color: var(--bs-body-color);
+}
+.flux-job-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Status dot ───────────────────────────────────────────────────────────── */
+.flux-status-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--bs-border-color);
+  flex-shrink: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+.flux-status-dot.is-running  { border-color: var(--flux-accent); animation: dot-pulse 1.5s infinite; }
+.flux-status-dot.is-success  { background: var(--flux-success); border-color: var(--flux-success); color: #fff; }
+.flux-status-dot.is-failure  { background: var(--flux-danger);  border-color: var(--flux-danger);  color: #fff; }
+.flux-status-dot.is-skipped  { opacity: .4; }
+
+@keyframes dot-pulse {
+  0%,100% { border-color: var(--flux-accent); box-shadow: 0 0 0 0 rgba(88,166,255,.4); }
+  50%      { box-shadow: 0 0 0 4px rgba(88,166,255,0); }
 }
 
-.flux-job-item.active {
-    background-color: rgba(56, 139, 253, 0.15);
-    border: 1px solid var(--flux-ansi-blue);
-    color: var(--flux-text);
+/* ── Header run badge ─────────────────────────────────────────────────────── */
+.flux-run-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border: 1px solid var(--bs-border-color);
+  background: transparent;
+  color: var(--bs-secondary-color);
+  transition: all .2s;
+}
+.flux-run-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bs-secondary-color);
+  flex-shrink: 0;
+}
+.flux-run-badge[data-status="running"]  { border-color: var(--flux-accent); color: var(--flux-accent); }
+.flux-run-badge[data-status="running"] .flux-run-dot { background: var(--flux-accent); animation: dot-pulse 1.5s infinite; }
+.flux-run-badge[data-status="success"]  { border-color: var(--flux-success); color: var(--flux-success); }
+.flux-run-badge[data-status="success"] .flux-run-dot { background: var(--flux-success); }
+.flux-run-badge[data-status="failure"]  { border-color: var(--flux-danger); color: var(--flux-danger); }
+.flux-run-badge[data-status="failure"] .flux-run-dot { background: var(--flux-danger); }
+
+/* ── Main area ────────────────────────────────────────────────────────────── */
+.flux-main { background: var(--bs-body-bg); }
+
+.flux-toolbar {
+  height: 42px;
+  flex-shrink: 0;
+  background: var(--flux-toolbar-bg);
 }
 
-.job-status-icon {
-    margin-right: 4px;
+/* ── Search ───────────────────────────────────────────────────────────────── */
+.search-wrap { position: relative; }
+.search-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--bs-secondary-color);
+  font-size: 12px;
+  pointer-events: none;
+}
+.flux-search {
+  padding-left: 28px;
+  width: 200px;
+  font-size: 13px;
+  background: var(--bs-body-bg);
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
+}
+.flux-search:focus {
+  background: var(--bs-body-bg);
+  border-color: var(--flux-accent);
+  box-shadow: 0 0 0 3px var(--flux-accent-subtle);
+  color: var(--bs-body-color);
 }
 
-.job-name {
-    font-weight: 600;
-    font-size: 14px;
-}
+/* ── Steps container ──────────────────────────────────────────────────────── */
+.steps-wrap { gap: 4px; }
 
-/* Main Content */
-.flux-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background-color: var(--flux-bg);
-    overflow: hidden;
-}
-
-.flux-workflow-header {
-    padding: 12px 24px;
-    border-bottom: 1px solid var(--flux-border);
-    background-color: var(--flux-header-bg);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.flux-workflow-header h2 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-}
-
-/* Log Search Input */
-.flux-search-input {
-    background-color: var(--flux-bg);
-    border: 1px solid var(--flux-border);
-    color: var(--flux-text);
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    width: 200px;
-    font-family: var(--flux-font-sans);
-}
-
-.flux-search-input:focus {
-    outline: none;
-    border-color: var(--flux-ansi-blue);
-    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
-}
-
-/* Step Accordions */
-.flux-steps-container {
-    padding: 0;
-    overflow-y: auto;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    /* Add gap here too */
-    padding: 12px;
-    /* Add padding container */
-}
-
-/* Separate Styles for Steps */
+/* ── Step accordion (<details>) ───────────────────────────────────────────── */
 .flux-step {
-    border: 1px solid var(--flux-border);
-    border-radius: 6px;
-    overflow: hidden;
-    background-color: var(--flux-bg);
-    margin-bottom: 0;
-    /* Handled by container gap */
+  border: 1px solid var(--bs-border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--flux-step-bg);
+  margin-bottom: 4px;
+  transition: border-color .15s;
 }
+.flux-step[data-status="running"]  { border-color: var(--flux-accent); }
+.flux-step[data-status="success"]  { border-color: rgba(63,185,80,.4); }
+.flux-step[data-status="failure"]  { border-color: rgba(248,81,73,.5); }
 
 .flux-step-summary {
-    padding: 12px 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    list-style: none;
-    font-weight: 600;
-    transition: background 0.1s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  min-height: 38px;
+}
+.flux-step-summary::-webkit-details-marker { display: none; }
+.flux-step-summary:hover { background: var(--flux-step-hover-bg); }
+
+.flux-step-chevron {
+  color: var(--bs-secondary-color);
+  transition: transform .2s;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.flux-step[open] .flux-step-chevron { transform: rotate(90deg); }
+
+.flux-step-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bs-body-color);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.flux-step-summary:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+/* Phase badge: PRE / POST */
+.flux-phase-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.flux-phase-pre  { background: rgba(210,153,34,.15); color: var(--flux-warning); border: 1px solid rgba(210,153,34,.3); }
+.flux-phase-post { background: rgba(188,140,255,.12); color: var(--ansi-magenta); border: 1px solid rgba(188,140,255,.3); }
+
+.flux-step-duration {
+  font-family: var(--bs-font-monospace);
+  font-size: 11px;
+  color: var(--bs-secondary-color);
+  flex-shrink: 0;
 }
 
-.flux-step-summary::-webkit-details-marker {
-    display: none;
-}
+/* ── Step status icon (inside summary) ───────────────────────────────────── */
+.flux-step-icon { flex-shrink: 0; font-size: 14px; }
+.flux-step-icon.is-pending  { color: var(--flux-muted); }
+.flux-step-icon.is-running  { color: var(--flux-accent); animation: spin .9s linear infinite; }
+.flux-step-icon.is-success  { color: var(--flux-success); }
+.flux-step-icon.is-failure  { color: var(--flux-danger); }
+.flux-step-icon.is-skipped  { color: var(--flux-muted); opacity: .5; }
 
-.flux-step-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-/* Chevron Animation */
-.flux-step-title::before {
-    content: '';
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-right: 2px solid var(--flux-text-muted);
-    border-bottom: 2px solid var(--flux-text-muted);
-    transform: rotate(-45deg);
-    margin-right: 8px;
-    transition: transform 0.2s;
+/* ── Log body ─────────────────────────────────────────────────────────────── */
+.flux-log-body {
+  border-top: 1px solid var(--bs-border-color);
+  background: var(--flux-log-bg);
+  overflow: hidden;
 }
-
-.flux-step[open] .flux-step-title::before {
-    transform: rotate(45deg);
-}
-
-/* Logs */
-.flux-step-logs {
-    background-color: var(--flux-code-bg);
-    padding: 8px 0;
-    /* Padding handled by lines */
-    font-family: var(--flux-font-mono);
-    font-size: 12px;
-    color: var(--flux-code-text);
-    overflow-x: auto;
-    white-space: pre-wrap;
-    border-top: 1px solid var(--flux-border);
-}
+.flux-log-body:empty { display: none; }
 
 .flux-log-line {
-    display: flex;
-    align-items: baseline;
-    /* Fix alignment */
-    gap: 0;
-    min-height: 20px;
-    padding: 2px 16px;
-    font-variant-ligatures: none;
+  display: flex;
+  align-items: flex-start;
+  min-height: 20px;
+  font-family: var(--bs-font-monospace);
+  font-size: 12px;
+  line-height: 20px;
 }
+.flux-log-line:hover { background: rgba(127,127,127,.05); }
+.flux-log-line.is-hidden { display: none !important; }
+.flux-log-line.is-match  { background: rgba(210,153,34,.08); }
 
-.flux-log-line:hover {
-    background-color: rgba(255, 255, 255, 0.03);
-    /* Hover effect */
-}
-
-/* Line Numbers */
 .flux-lineno {
-    color: var(--flux-text-muted);
-    min-width: 30px;
-    text-align: right;
-    margin-right: 12px;
-    user-select: none;
-    opacity: 0.5;
-    font-size: 11px;
+  flex-shrink: 0;
+  min-width: 44px;
+  padding: 0 10px 0 4px;
+  text-align: right;
+  color: var(--flux-lineno-color);
+  user-select: none;
+  border-right: 1px solid var(--bs-border-color);
 }
 
 .flux-log-ts {
-    color: var(--flux-text-muted);
-    user-select: none;
-    flex-shrink: 0;
-    width: 90px;
-    /* Fixed width for alignment */
-    text-align: right;
-    border-right: 1px solid var(--flux-border);
-    padding-right: 12px;
-    margin-right: 12px;
-    font-size: 11px;
+  flex-shrink: 0;
+  width: 90px;
+  padding: 0 8px;
+  color: var(--flux-ts-color);
+  user-select: none;
+  font-size: 11px;
 }
 
 .flux-log-content {
-    color: var(--flux-code-text);
-    word-break: break-all;
-    flex: 1;
+  flex: 1;
+  padding: 0 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--bs-body-color);
 }
+.flux-log-line[data-type="stderr"] .flux-log-content { color: var(--flux-warning); }
+.flux-log-line[data-type="cmd"]    .flux-log-content { color: var(--flux-cmd-color); font-style: italic; }
 
-.flux-cmd-prompt {
-    color: var(--flux-ansi-blue);
-    margin-right: 8px;
-    font-weight: bold;
-    user-select: none;
-}
+/* ── Drop zone ────────────────────────────────────────────────────────────── */
+.flux-dropzone-outer { background: var(--bs-body-bg); }
 
-/* Status Icons */
-.icon-status {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    display: inline-block;
-    flex-shrink: 0;
-}
-
-.status-pending {
-    border: 2px solid var(--flux-text-muted);
-}
-
-.status-running {
-    border: 2px solid var(--flux-ansi-yellow);
-    border-top-color: transparent;
-    animation: spin 1s linear infinite;
-}
-
-.status-success {
-    background-color: var(--flux-success);
-    position: relative;
-}
-
-.status-success::after {
-    content: '✓';
-    color: var(--flux-bg);
-    position: absolute;
-    left: 4px;
-    top: 0px;
-    font-size: 11px;
-    font-weight: 900;
-}
-
-.status-failure {
-    background-color: var(--flux-error);
-    position: relative;
-}
-
-.status-failure::after {
-    content: '✕';
-    color: var(--flux-bg);
-    position: absolute;
-    left: 4px;
-    top: 0px;
-    font-size: 11px;
-    font-weight: 900;
-}
-
-@keyframes spin {
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
-/* Theme Select */
-.theme-select {
-    background: transparent;
-    color: var(--flux-text);
-    border: 1px solid var(--flux-border);
-    padding: 4px 8px;
-    border-radius: 6px;
-}
-
-/* Drop Zone */
 .flux-dropzone {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px dashed var(--flux-border);
-    margin: 24px;
-    border-radius: 6px;
-    background-color: var(--flux-bg);
+  max-width: 420px;
+  width: 100%;
+  padding: 48px 40px;
+  border: 1.5px dashed var(--bs-border-color);
+  border-radius: 10px;
+  transition: border-color .2s, background .2s;
+}
+.flux-dropzone.is-over {
+  border-color: var(--flux-accent);
+  background: var(--flux-accent-subtle);
+}
+.flux-dz-icon { font-size: 36px; color: var(--bs-secondary-color); }
+
+/* ── Scrollbars ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 8px; height: 8px; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: var(--bs-border-color); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bs-secondary-color); }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .flux-sidebar  { display: none; }
+  .flux-search   { width: 140px; }
 }
 
-.dropzone-content h1 {
-    font-size: 24px;
-    font-weight: 600;
-    margin-bottom: 12px;
+/* ── Job duration in sidebar ─────────────────────────────────────────────── */
+.flux-job-dur {
+  font-size: 11px;
+  font-family: var(--bs-font-monospace);
+  flex-shrink: 0;
 }
 
-.dropzone-content button {
-    background-color: var(--flux-success);
-    color: white;
-    border: none;
-    padding: 6px 16px;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
+/* ── Step summary: ensure chevron always on far right ───────────────────── */
+.flux-step-duration { margin-left: auto; }
+
+/* ── Landing page ─────────────────────────────────────────────────────────── */
+.flux-dropzone {
+  border: 1.5px dashed var(--bs-border-color);
+  border-radius: 10px;
+  transition: border-color .2s, background .2s;
+  cursor: pointer;
+}
+.flux-dropzone:hover { border-color: var(--flux-accent); }
+.flux-dropzone.is-over {
+  border-color: var(--flux-accent);
+  background: var(--flux-accent-subtle);
 }
 
-/* Scrollbars */
-::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+.flux-example-link {
+  background: var(--bs-secondary-bg);
+  border-color: var(--bs-border-color) !important;
+  color: var(--bs-body-color);
+  transition: background .15s, border-color .15s;
+}
+.flux-example-link:hover {
+  background: var(--bs-tertiary-bg);
+  border-color: var(--flux-accent) !important;
+  color: var(--bs-body-color);
 }
 
-::-webkit-scrollbar-track {
-    background: transparent;
+/* ── Run badge (fix class name — was flux-run-badge, now run-badge) ─────── */
+.run-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--bs-border-color);
+  background: transparent;
+  color: var(--bs-secondary-color);
+  transition: all .25s;
 }
-
-::-webkit-scrollbar-thumb {
-    background: var(--flux-border);
-    border: 2px solid var(--flux-bg);
-    border-radius: 10px;
+.run-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--bs-secondary-color);
+  flex-shrink: 0;
 }
+.run-badge[data-status="running"]  { border-color: var(--flux-accent); color: var(--flux-accent); }
+.run-badge[data-status="running"] .run-dot { background: var(--flux-accent); animation: dot-pulse 1.5s infinite; }
+.run-badge[data-status="success"]  { border-color: var(--flux-success); color: var(--flux-success); }
+.run-badge[data-status="success"] .run-dot { background: var(--flux-success); }
+.run-badge[data-status="failure"]  { border-color: var(--flux-danger); color: var(--flux-danger); }
+.run-badge[data-status="failure"] .run-dot { background: var(--flux-danger); }

@@ -1,9 +1,3 @@
-<?php
-
-declare(strict_types=1);
-
+<?php declare(strict_types=1);
 namespace Entreya\Flux\Exceptions;
-
-class ParseException extends FluxException
-{
-}
+class ParseException extends FluxException {}
