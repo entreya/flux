@@ -1,0 +1,12 @@
+name: Matrix Strategy Test
+
+jobs:
+  test_matrix:
+    name: "Test PHP ${{ matrix.php_version }} - ${{ matrix.os }}"
+    strategy:
+      matrix:
+        php_version: ['8.1', '8.2', '8.3']
+        os: ['ubuntu', 'alpine']
+    steps:
+      - name: Check Env
+        run: echo "Running on ${{ matrix.os }} with PHP ${{ matrix.php_version }}"

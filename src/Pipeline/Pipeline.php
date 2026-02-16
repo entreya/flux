@@ -49,40 +49,108 @@ class Pipeline
         $pipeline            = new self($data['name'] ?? 'Workflow');
         $pipeline->config    = $config;
         $pipeline->globalEnv = $data['env'] ?? [];
+        
+        // Process Inputs (Default values + Config overrides)
+        $providedInputs = $config['inputs'] ?? [];
+        $inputs = [];
+        foreach ($data['inputs'] ?? [] as $key => $def) {
+            $inputs[$key] = $providedInputs[$key] ?? $def['default'] ?? '';
+        }
 
         $jobs = $data['jobs'] ?? [];
 
-        // Support legacy flat `steps:` format
+        // Legacy flat format support
         if (empty($jobs) && isset($data['steps'])) {
             $jobs = ['default' => ['name' => 'Run', 'steps' => $data['steps']]];
         }
 
         foreach ($jobs as $jobId => $jobData) {
-            $job = new Job((string) $jobId, $jobData['name'] ?? (string) $jobId);
-            $job->setNeeds((array) ($jobData['needs'] ?? []));
-            $job->setEnv($jobData['env'] ?? []);
+            // Check for Matrix Strategy
+            $matrix = $jobData['strategy']['matrix'] ?? null;
 
-            foreach ($jobData['pre'] ?? [] as $s) {
-                $job->addPreStep(self::makeStep($s));
-            }
-            foreach ($jobData['steps'] ?? [] as $s) {
-                $job->addStep(self::makeStep($s));
-            }
-            foreach ($jobData['post'] ?? [] as $s) {
-                $job->addPostStep(self::makeStep($s));
-            }
+            if ($matrix && is_array($matrix)) {
+                // Expand Matrix
+                $combinations = self::expandMatrix($matrix);
+                foreach ($combinations as $combo) {
+                    $suffix = implode('-', array_values($combo));
+                    $newId  = "{$jobId}-{$suffix}";
+                    
+                    // Context for interpolation
+                    $context = [
+                        'matrix' => $combo,
+                        'inputs' => $inputs,
+                        'env'    => $pipeline->globalEnv,
+                    ];
 
-            $pipeline->jobs[$jobId] = $job;
+                    self::addJobToPipeline($pipeline, $newId, $jobData, $context);
+                }
+            } else {
+                // Single Job
+                $context = [
+                    'matrix' => [],
+                    'inputs' => $inputs,
+                    'env'    => $pipeline->globalEnv,
+                ];
+                self::addJobToPipeline($pipeline, (string)$jobId, $jobData, $context);
+            }
         }
 
         return $pipeline;
     }
 
-    private static function makeStep(array $s): Step
+    private static function expandMatrix(array $matrix): array
     {
+        $keys = array_keys($matrix);
+        $combinations = [[]];
+
+        foreach ($keys as $key) {
+            $values = $matrix[$key];
+            $newCombinations = [];
+            foreach ($combinations as $combo) {
+                foreach ($values as $value) {
+                    $newCombo = $combo;
+                    $newCombo[$key] = $value;
+                    $newCombinations[] = $newCombo;
+                }
+            }
+            $combinations = $newCombinations;
+        }
+
+        return $combinations;
+    }
+
+    private static function addJobToPipeline(self $pipeline, string $id, array $data, array $context): void
+    {
+        // Interpolate Name
+        $name = \Entreya\Flux\Utils\VariableInterpolator::interpolate($data['name'] ?? $id, $context);
+        
+        $job = new Job($id, $name);
+        $job->setNeeds((array) ($data['needs'] ?? []));
+        $job->setEnv($data['env'] ?? []);
+        
+        foreach ($data['pre'] ?? [] as $s) {
+            $job->addPreStep(self::makeStep($s, $context));
+        }
+        foreach ($data['steps'] ?? [] as $s) {
+            $job->addStep(self::makeStep($s, $context));
+        }
+        foreach ($data['post'] ?? [] as $s) {
+            $job->addPostStep(self::makeStep($s, $context));
+        }
+
+        $pipeline->jobs[$id] = $job;
+    }
+
+    private static function makeStep(array $s, array $context = []): Step
+    {
+        $command = $s['run'] ?? null;
+        if ($command && !empty($context)) {
+            $command = \Entreya\Flux\Utils\VariableInterpolator::interpolate($command, $context);
+        }
+
         return new Step(
             name:            $s['name'] ?? 'Step',
-            command:         $s['run']  ?? null,
+            command:         $command,
             env:             $s['env']  ?? [],
             continueOnError: (bool) ($s['continue-on-error'] ?? false),
             workingDir:      $s['working-directory'] ?? null,

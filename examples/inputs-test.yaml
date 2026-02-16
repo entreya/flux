@@ -1,0 +1,11 @@
+name: Inputs Test
+inputs:
+  target:
+    default: "World"
+  greeting:
+    default: "Hello"
+
+jobs:
+  greet:
+    steps:
+      - run: echo "${{ inputs.greeting }}, ${{ inputs.target }}!"
