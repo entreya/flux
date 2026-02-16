@@ -58,10 +58,11 @@ class CommandRunner
         $stdoutBuf = '';
         $stderrBuf = '';
         $startTime = microtime(true);
+        $openPipes = [1 => $pipes[1], 2 => $pipes[2]];
 
         try {
-            while (true) {
-                $read   = [$pipes[1], $pipes[2]];
+            while (!empty($openPipes)) {
+                $read   = $openPipes;
                 $write  = null;
                 $except = null;
 
@@ -69,24 +70,29 @@ class CommandRunner
                 $changed = stream_select($read, $write, $except, 0, 100_000);
 
                 if ($changed === false) {
+                    // Error or interruption
                     break;
                 }
 
                 if ($changed > 0) {
                     foreach ($read as $stream) {
                         $type = ($stream === $pipes[1]) ? 'stdout' : 'stderr';
+                        $id   = ($stream === $pipes[1]) ? 1 : 2;
 
                         $chunk = fread($stream, 8192);
-                        if ($chunk === false || $chunk === '') {
-                            continue;
+
+                        if ($chunk !== false && $chunk !== '') {
+                            if ($type === 'stdout') {
+                                $stdoutBuf .= $chunk;
+                                yield from $this->drainLines($stdoutBuf, 'stdout');
+                            } else {
+                                $stderrBuf .= $chunk;
+                                yield from $this->drainLines($stderrBuf, 'stderr');
+                            }
                         }
 
-                        if ($type === 'stdout') {
-                            $stdoutBuf .= $chunk;
-                            yield from $this->drainLines($stdoutBuf, 'stdout');
-                        } else {
-                            $stderrBuf .= $chunk;
-                            yield from $this->drainLines($stderrBuf, 'stderr');
+                        if (feof($stream) || ($chunk === false && feof($stream))) {
+                            unset($openPipes[$id]);
                         }
                     }
                 }
@@ -95,20 +101,6 @@ class CommandRunner
                 if (microtime(true) - $startTime > $this->timeout) {
                     proc_terminate($process, 9);
                     throw new ExecutionException("Command timed out after {$this->timeout}s.");
-                }
-
-                $status = proc_get_status($process);
-                if (!$status['running']) {
-                    // Final drain after process exits
-                    $remaining = stream_get_contents($pipes[1]);
-                    if ($remaining) {
-                        $stdoutBuf .= $remaining;
-                    }
-                    $remaining = stream_get_contents($pipes[2]);
-                    if ($remaining) {
-                        $stderrBuf .= $remaining;
-                    }
-                    break;
                 }
             }
 
@@ -120,8 +112,11 @@ class CommandRunner
                 yield ['type' => 'stderr', 'content' => $stderrBuf];
             }
 
-            $status   = proc_get_status($process);
-            $exitCode = $status['exitcode'];
+            // Explicitly close pipes before proc_close
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            $exitCode = proc_close($process);
+            $process  = null;
 
             if ($exitCode !== 0) {
                 throw new ExecutionException(
@@ -131,9 +126,9 @@ class CommandRunner
             }
 
         } finally {
-            @fclose($pipes[1]);
-            @fclose($pipes[2]);
-            @proc_close($process);
+            if (isset($pipes[1]) && is_resource($pipes[1])) @fclose($pipes[1]);
+            if (isset($pipes[2]) && is_resource($pipes[2])) @fclose($pipes[2]);
+            if (isset($process) && is_resource($process)) @proc_close($process);
         }
     }
 
@@ -168,16 +163,16 @@ class CommandRunner
         // Multi-line script
         if (str_contains($command, "\n")) {
             $tmp = tempnam(sys_get_temp_dir(), 'flux_script_') . '.sh';
-            file_put_contents($tmp, "#!/usr/bin/env bash\nset -e\n" . $command);
+            file_put_contents($tmp, "#!/bin/sh\nset -e\n" . $command);
             chmod($tmp, 0700);
 
             // Register cleanup
             register_shutdown_function(fn() => @unlink($tmp));
 
-            return "bash " . escapeshellarg($tmp);
+            return "sh " . escapeshellarg($tmp);
         }
 
-        // Single-line: pass through bash so we get consistent env handling
-        return "bash -c " . escapeshellarg($command);
+        // Single-line
+        return "sh -c " . escapeshellarg($command);
     }
 }
