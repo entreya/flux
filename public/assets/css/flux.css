@@ -1,6 +1,6 @@
-/* GitHub Actions Style Theme */
+/* GitHub Actions Exact Style */
 :root {
-    /* Defaults populated by ThemeManager */
+    /* Fonts */
     --flux-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     --flux-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 }
@@ -15,6 +15,7 @@ body {
     display: flex;
     flex-direction: column;
     font-size: 14px;
+    line-height: 1.5;
 }
 
 /* Header */
@@ -30,23 +31,27 @@ body {
 
 .flux-workflow-title {
     font-weight: 600;
-    font-size: 18px;
+    font-size: 16px;
     display: flex;
     align-items: center;
     gap: 12px;
 }
 
+/* Status Badges */
 .flux-status-badge {
     padding: 2px 10px;
     border-radius: 100px;
     font-size: 12px;
     font-weight: 500;
     border: 1px solid var(--flux-border);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .flux-status-badge.running {
     color: var(--flux-ansi-blue);
-    border-color: var(--flux-ansi-blue);
+    border-color: var(--flux-ansi-border);
 }
 
 .flux-status-badge.success {
@@ -55,11 +60,11 @@ body {
 }
 
 .flux-status-badge.failure {
-    color: var(--flux-ansi-red);
-    border-color: var(--flux-ansi-red);
+    color: var(--flux-error);
+    border-color: var(--flux-error);
 }
 
-/* Main Layout */
+/* Layout */
 .flux-layout {
     display: flex;
     flex: 1;
@@ -73,55 +78,77 @@ body {
     border-right: 1px solid var(--flux-border);
     overflow-y: auto;
     flex-shrink: 0;
+    padding-top: 8px;
 }
 
 .flux-job-group {
-    padding: 8px 0;
+    border-bottom: none;
+    /* Removed separator for clean list */
+}
+
+.flux-sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--flux-border);
+    margin-bottom: 8px;
+}
+
+.flux-filename {
+    font-family: var(--flux-font-mono);
+    font-size: 11px;
+    color: var(--flux-text-muted);
+    word-break: break-all;
 }
 
 .flux-job-title {
-    padding: 8px 16px;
-    font-weight: 600;
-    color: var(--flux-text);
+    padding: 0;
+    pointer-events: none;
+    border: none;
+}
+
+.flux-job-title.active {
+    border-left: none;
+    background: none;
+}
+
+/* Reset previous attempt */
+
+/* Sidebar Pills */
+.flux-job-item {
+    padding: 8px 12px;
+    margin: 4px 12px;
+    border-radius: 6px;
     display: flex;
     align-items: center;
     gap: 8px;
-}
-
-.flux-step-item {
-    padding: 8px 16px 8px 36px;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    border: 1px solid transparent;
+    transition: all 0.2s;
     color: var(--flux-text-muted);
-    transition: background 0.1s;
-    border-left: 2px solid transparent;
+    /* Faded by default */
+    font-weight: 500;
 }
 
-.flux-step-item:hover {
-    background-color: rgba(127, 127, 127, 0.1);
-}
-
-.flux-step-item.active {
-    background-color: rgba(56, 139, 253, 0.1);
-    border-left-color: var(--flux-info);
+.flux-job-item:hover {
+    background-color: rgba(255, 255, 255, 0.04);
     color: var(--flux-text);
-    border-radius: 4px;
 }
 
-.flux-step-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.flux-job-item.active {
+    background-color: rgba(56, 139, 253, 0.15);
+    border: 1px solid var(--flux-ansi-blue);
+    color: var(--flux-text);
 }
 
-.flux-step-duration {
-    font-size: 12px;
-    opacity: 0.7;
+.job-status-icon {
+    margin-right: 4px;
 }
 
-/* Main Content (Logs) */
+.job-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+/* Main Content */
 .flux-main {
     flex: 1;
     display: flex;
@@ -130,73 +157,176 @@ body {
     overflow: hidden;
 }
 
-.flux-log-header {
+.flux-workflow-header {
     padding: 12px 24px;
     border-bottom: 1px solid var(--flux-border);
-    background-color: var(--flux-bg);
+    background-color: var(--flux-header-bg);
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
 }
 
-.flux-log-title {
+.flux-workflow-header h2 {
+    margin: 0;
+    font-size: 16px;
     font-weight: 600;
 }
 
-.flux-log-actions button {
-    background: transparent;
+/* Log Search Input */
+.flux-search-input {
+    background-color: var(--flux-bg);
     border: 1px solid var(--flux-border);
     color: var(--flux-text);
-    padding: 4px 12px;
+    padding: 6px 12px;
     border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
+    width: 200px;
+    font-family: var(--flux-font-sans);
 }
 
-.flux-log-actions button:hover {
-    background-color: var(--flux-border);
+.flux-search-input:focus {
+    outline: none;
+    border-color: var(--flux-ansi-blue);
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
 }
 
-.flux-log-viewport {
-    flex: 1;
+/* Step Accordions */
+.flux-steps-container {
+    padding: 0;
     overflow-y: auto;
-    padding: 16px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* Add gap here too */
+    padding: 12px;
+    /* Add padding container */
+}
+
+/* Separate Styles for Steps */
+.flux-step {
+    border: 1px solid var(--flux-border);
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: var(--flux-bg);
+    margin-bottom: 0;
+    /* Handled by container gap */
+}
+
+.flux-step-summary {
+    padding: 12px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    list-style: none;
+    font-weight: 600;
+    transition: background 0.1s;
+}
+
+.flux-step-summary:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.flux-step-summary::-webkit-details-marker {
+    display: none;
+}
+
+.flux-step-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Chevron Animation */
+.flux-step-title::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-right: 2px solid var(--flux-text-muted);
+    border-bottom: 2px solid var(--flux-text-muted);
+    transform: rotate(-45deg);
+    margin-right: 8px;
+    transition: transform 0.2s;
+}
+
+.flux-step[open] .flux-step-title::before {
+    transform: rotate(45deg);
+}
+
+/* Logs */
+.flux-step-logs {
+    background-color: var(--flux-code-bg);
+    padding: 8px 0;
+    /* Padding handled by lines */
     font-family: var(--flux-font-mono);
     font-size: 12px;
-    line-height: 1.5;
-    background-color: var(--flux-code-bg);
+    color: var(--flux-code-text);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    border-top: 1px solid var(--flux-border);
 }
 
 .flux-log-line {
     display: flex;
-    gap: 12px;
-    white-space: pre-wrap;
-    word-break: break-all;
+    align-items: baseline;
+    /* Fix alignment */
+    gap: 0;
+    min-height: 20px;
+    padding: 2px 16px;
+    font-variant-ligatures: none;
+}
+
+.flux-log-line:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+    /* Hover effect */
+}
+
+/* Line Numbers */
+.flux-lineno {
+    color: var(--flux-text-muted);
+    min-width: 30px;
+    text-align: right;
+    margin-right: 12px;
+    user-select: none;
+    opacity: 0.5;
+    font-size: 11px;
 }
 
 .flux-log-ts {
     color: var(--flux-text-muted);
     user-select: none;
     flex-shrink: 0;
-    width: 80px;
+    width: 90px;
+    /* Fixed width for alignment */
+    text-align: right;
+    border-right: 1px solid var(--flux-border);
+    padding-right: 12px;
+    margin-right: 12px;
+    font-size: 11px;
 }
 
 .flux-log-content {
     color: var(--flux-code-text);
+    word-break: break-all;
+    flex: 1;
 }
 
-.flux-log-command {
-    color: var(--flux-text-muted);
-    padding: 4px 0;
+.flux-cmd-prompt {
+    color: var(--flux-ansi-blue);
+    margin-right: 8px;
     font-weight: bold;
+    user-select: none;
 }
 
-/* Icons */
+/* Status Icons */
 .icon-status {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     display: inline-block;
+    flex-shrink: 0;
 }
 
 .status-pending {
@@ -204,28 +334,42 @@ body {
 }
 
 .status-running {
-    border: 2px solid var(--flux-ansi-blue);
+    border: 2px solid var(--flux-ansi-yellow);
     border-top-color: transparent;
     animation: spin 1s linear infinite;
 }
 
 .status-success {
     background-color: var(--flux-success);
+    position: relative;
+}
+
+.status-success::after {
+    content: '✓';
+    color: var(--flux-bg);
+    position: absolute;
+    left: 4px;
+    top: 0px;
+    font-size: 11px;
+    font-weight: 900;
 }
 
 .status-failure {
     background-color: var(--flux-error);
+    position: relative;
 }
 
-.status-skipped {
-    background-color: var(--flux-text-muted);
+.status-failure::after {
+    content: '✕';
+    color: var(--flux-bg);
+    position: absolute;
+    left: 4px;
+    top: 0px;
+    font-size: 11px;
+    font-weight: 900;
 }
 
 @keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-
     100% {
         transform: rotate(360deg);
     }
@@ -233,11 +377,11 @@ body {
 
 /* Theme Select */
 .theme-select {
-    background-color: var(--flux-bg);
+    background: transparent;
     color: var(--flux-text);
     border: 1px solid var(--flux-border);
-    border-radius: 6px;
     padding: 4px 8px;
+    border-radius: 6px;
 }
 
 /* Drop Zone */
@@ -247,50 +391,31 @@ body {
     align-items: center;
     justify-content: center;
     border: 2px dashed var(--flux-border);
-    margin: 20px;
-    border-radius: 12px;
+    margin: 24px;
+    border-radius: 6px;
     background-color: var(--flux-bg);
-    transition: all 0.2s;
-}
-
-.flux-dropzone.highlight {
-    border-color: var(--flux-ansi-blue);
-    background-color: rgba(56, 139, 253, 0.05);
-}
-
-.dropzone-content {
-    text-align: center;
 }
 
 .dropzone-content h1 {
     font-size: 24px;
+    font-weight: 600;
     margin-bottom: 12px;
 }
 
-.dropzone-content p {
-    color: var(--flux-text-muted);
-    margin-bottom: 24px;
-}
-
 .dropzone-content button {
-    background-color: var(--flux-ansi-blue);
+    background-color: var(--flux-success);
     color: white;
     border: none;
-    padding: 10px 20px;
+    padding: 6px 16px;
     border-radius: 6px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.2s;
 }
 
-.dropzone-content button:hover {
-    opacity: 0.9;
-}
-
-/* Scrollbar Polish */
+/* Scrollbars */
 ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -299,9 +424,6 @@ body {
 
 ::-webkit-scrollbar-thumb {
     background: var(--flux-border);
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--flux-text-muted);
+    border: 2px solid var(--flux-bg);
+    border-radius: 10px;
 }

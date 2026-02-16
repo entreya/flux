@@ -15,26 +15,20 @@ class ThemeManager
             'name' => 'GitHub Dark',
             'bg' => '#0d1117',
             'sidebar' => '#161b22',
+            'header-bg' => '#161b22',
+            'border' => '#30363d',
             'text' => '#c9d1d9',
             'text-muted' => '#8b949e',
-            'border' => '#30363d',
-            'success' => '#3fb950',
-            'error' => '#f85149',
-            'warning' => '#d29922',
-            'info' => '#58a6ff',
             'code-bg' => '#0d1117',
             'code-text' => '#c9d1d9',
-            'header-bg' => '#161b22',
-            'log-timestamp' => '#6e7681',
-            // ANSI Colors
-            'ansi-black' => '#484f58',
-            'ansi-red' => '#ff7b72',
             'ansi-green' => '#3fb950',
-            'ansi-yellow' => '#d29922',
+            'ansi-red' => '#f85149',
             'ansi-blue' => '#58a6ff',
-            'ansi-magenta' => '#bc8cff',
-            'ansi-cyan' => '#39c5cf',
-            'ansi-white' => '#b1bac4',
+            'ansi-yellow' => '#d29922',
+            'success' => '#238636', // GitHub check green
+            'error' => '#da3633',   // GitHub error red
+            'warning' => '#9e6a03', // GitHub warning
+            'info' => '#1f6feb',    // GitHub blue accent
         ],
         'light' => [
             'name' => 'GitHub Light',
