@@ -1,452 +1,506 @@
 /*
- * flux.css — Theme variables + log viewer custom styles
- *
- * Bootstrap 5 handles layout, components, and utilities.
- * This file ONLY overrides Bootstrap variables and adds styles
- * that Bootstrap does not cover (log lines, step accordion, status icons).
- *
- * Theming is entirely CSS-custom-property driven — framework agnostic.
+ * flux.css — GitHub Actions-inspired workflow viewer
+ * entreya/flux
  */
 
-/* ── GitHub-Dark theme overrides for Bootstrap 5 ────────────────────────── */
+/* ── Fonts ────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+
+:root {
+  --font-ui:   'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+}
+
+/* ── GitHub Dark ──────────────────────────────────────────────────────────── */
 [data-bs-theme="dark"] {
   --bs-body-bg:           #0d1117;
   --bs-body-color:        #e6edf3;
   --bs-secondary-bg:      #161b22;
-  --bs-tertiary-bg:       #0d1117;
-  --bs-border-color:      #30363d;
-  --bs-border-color-translucent: rgba(48,54,61,.6);
-  --bs-secondary-color:   #8b949e;
+  --bs-border-color:      #21262d;
+  --bs-secondary-color:   #7d8590;
   --bs-emphasis-color:    #f0f6fc;
-  --bs-link-color:        #58a6ff;
-  --bs-code-color:        #d2a8ff;
 
-  /* Flux-specific tokens */
   --flux-header-bg:       #161b22;
   --flux-sidebar-bg:      #0d1117;
-  --flux-toolbar-bg:      #161b22;
-  --flux-step-bg:         #161b22;
-  --flux-step-hover-bg:   #1c2128;
-  --flux-log-bg:          #0d1117;
+  --flux-sidebar-hover:   #161b22;
+  --flux-log-bg:          #010409;
+  --flux-log-gutter:      #0d1117;
   --flux-lineno-color:    #3d444d;
-  --flux-ts-color:        #3d444d;
-  --flux-cmd-color:       #6e7681;
+  --flux-cmd-color:       #484f58;
 
-  /* Status colors (GitHub palette) */
   --flux-success:         #3fb950;
-  --flux-success-subtle:  rgba(63,185,80,.15);
+  --flux-success-bg:      rgba(63,185,80,.08);
+  --flux-success-border:  rgba(63,185,80,.25);
   --flux-danger:          #f85149;
-  --flux-danger-subtle:   rgba(248,81,73,.15);
-  --flux-accent:          #58a6ff;
-  --flux-accent-subtle:   rgba(88,166,255,.15);
+  --flux-danger-bg:       rgba(248,81,73,.08);
+  --flux-danger-border:   rgba(248,81,73,.25);
+  --flux-accent:          #4493f8;
+  --flux-accent-bg:       rgba(68,147,248,.08);
+  --flux-accent-border:   rgba(68,147,248,.3);
   --flux-warning:         #d29922;
-  --flux-muted:           #484f58;
+  --flux-warning-bg:      rgba(210,153,34,.08);
+  --flux-muted:           #30363d;
 
-  /* ANSI palette */
-  --ansi-black:      #484f58;  --ansi-red:       #ff7b72;
-  --ansi-green:      #3fb950;  --ansi-yellow:    #d29922;
-  --ansi-blue:       #58a6ff;  --ansi-magenta:   #bc8cff;
-  --ansi-cyan:       #39c5cf;  --ansi-white:     #b1bac4;
-  --ansi-br-black:   #6e7681;  --ansi-br-red:    #ffa198;
-  --ansi-br-green:   #56d364;  --ansi-br-yellow: #e3b341;
-  --ansi-br-blue:    #79c0ff;  --ansi-br-magenta:#d2a8ff;
-  --ansi-br-cyan:    #56d4dd;  --ansi-br-white:  #cdd9e5;
+  --ansi-black:      #484f58;  --ansi-red:        #ff7b72;
+  --ansi-green:      #3fb950;  --ansi-yellow:     #d29922;
+  --ansi-blue:       #4493f8;  --ansi-magenta:    #bc8cff;
+  --ansi-cyan:       #39c5cf;  --ansi-white:      #b1bac4;
+  --ansi-br-black:   #6e7681;  --ansi-br-red:     #ffa198;
+  --ansi-br-green:   #56d364;  --ansi-br-yellow:  #e3b341;
+  --ansi-br-blue:    #79c0ff;  --ansi-br-magenta: #d2a8ff;
+  --ansi-br-cyan:    #56d4dd;  --ansi-br-white:   #cdd9e5;
 }
 
+/* ── GitHub Light ─────────────────────────────────────────────────────────── */
 [data-bs-theme="light"] {
   --flux-header-bg:       #f6f8fa;
   --flux-sidebar-bg:      #f6f8fa;
-  --flux-toolbar-bg:      #f6f8fa;
-  --flux-step-bg:         #f6f8fa;
-  --flux-step-hover-bg:   #eef1f4;
+  --flux-sidebar-hover:   #eef1f4;
   --flux-log-bg:          #ffffff;
-  --flux-lineno-color:    #cfd6de;
-  --flux-ts-color:        #cfd6de;
+  --flux-log-gutter:      #f6f8fa;
+  --flux-lineno-color:    #bfcad8;
   --flux-cmd-color:       #57606a;
 
   --flux-success:         #1a7f37;
-  --flux-success-subtle:  rgba(26,127,55,.12);
+  --flux-success-bg:      rgba(26,127,55,.06);
+  --flux-success-border:  rgba(26,127,55,.25);
   --flux-danger:          #cf222e;
-  --flux-danger-subtle:   rgba(207,34,46,.12);
+  --flux-danger-bg:       rgba(207,34,46,.06);
+  --flux-danger-border:   rgba(207,34,46,.25);
   --flux-accent:          #0969da;
-  --flux-accent-subtle:   rgba(9,105,218,.12);
+  --flux-accent-bg:       rgba(9,105,218,.06);
+  --flux-accent-border:   rgba(9,105,218,.25);
   --flux-warning:         #9a6700;
-  --flux-muted:           #afb8c1;
+  --flux-warning-bg:      rgba(154,103,0,.06);
+  --flux-muted:           #d0d7de;
 
-  --ansi-black:      #24292f;  --ansi-red:       #cf222e;
-  --ansi-green:      #1a7f37;  --ansi-yellow:    #9a6700;
-  --ansi-blue:       #0969da;  --ansi-magenta:   #8250df;
-  --ansi-cyan:       #1b7c83;  --ansi-white:     #6e7681;
-  --ansi-br-black:   #57606a;  --ansi-br-red:    #a40e26;
-  --ansi-br-green:   #116329;  --ansi-br-yellow: #4d2d00;
-  --ansi-br-blue:    #0550ae;  --ansi-br-magenta:#6639ba;
-  --ansi-br-cyan:    #0550ae;  --ansi-br-white:  #8c959f;
+  --ansi-black:      #24292f;  --ansi-red:        #cf222e;
+  --ansi-green:      #1a7f37;  --ansi-yellow:     #9a6700;
+  --ansi-blue:       #0969da;  --ansi-magenta:    #8250df;
+  --ansi-cyan:       #1b7c83;  --ansi-white:      #6e7681;
+  --ansi-br-black:   #57606a;  --ansi-br-red:     #a40e26;
+  --ansi-br-green:   #116329;  --ansi-br-yellow:  #4d2d00;
+  --ansi-br-blue:    #0550ae;  --ansi-br-magenta: #6639ba;
+  --ansi-br-cyan:    #0550ae;  --ansi-br-white:   #8c959f;
 }
 
-/* ── Layout shell ─────────────────────────────────────────────────────────── */
-html, body { height: 100%; overflow: hidden; }
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; font-family: var(--font-ui); -webkit-font-smoothing: antialiased; }
 
+/* ── Header ───────────────────────────────────────────────────────────────── */
 .flux-header {
-  height: 49px;
+  height: 48px;
   flex-shrink: 0;
   background: var(--flux-header-bg);
-  position: relative;
-  z-index: 100;
-}
-
-.flux-logo { color: var(--bs-body-color); }
-.flux-logo:hover { opacity: .8; }
-
-.flux-layout {
-  display: flex;
-  height: calc(100vh - 49px);
-  overflow: hidden;
-}
-
-/* ── Sidebar ──────────────────────────────────────────────────────────────── */
-.flux-sidebar {
-  width: 256px;
-  min-width: 256px;
-  background: var(--flux-sidebar-bg);
-  overflow-y: auto;
-  flex-shrink: 0;
-}
-
-.flux-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .6px;
-  color: var(--bs-secondary-color);
-}
-
-.flux-sidebar-empty { font-size: 12px; }
-
-/* ── Job items ────────────────────────────────────────────────────────────── */
-.flux-job-item {
+  border-bottom: 1px solid var(--bs-border-color) !important;
+  z-index: 200;
   display: flex;
   align-items: center;
+  padding: 0 16px;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--bs-secondary-color);
-  transition: background .1s, color .1s;
-  margin-bottom: 1px;
 }
-.flux-job-item:hover {
-  background: var(--bs-secondary-bg);
-  color: var(--bs-body-color);
-}
-.flux-job-item.is-active {
-  background: var(--flux-accent-subtle);
-  border-color: var(--flux-accent);
-  color: var(--bs-body-color);
-}
-.flux-job-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ── Status dot ───────────────────────────────────────────────────────────── */
-.flux-status-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--bs-border-color);
+.flux-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--bs-body-color);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -.2px;
+  transition: opacity .15s;
   flex-shrink: 0;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
 }
-.flux-status-dot.is-running  { border-color: var(--flux-accent); animation: dot-pulse 1.5s infinite; }
-.flux-status-dot.is-success  { background: var(--flux-success); border-color: var(--flux-success); color: #fff; }
-.flux-status-dot.is-failure  { background: var(--flux-danger);  border-color: var(--flux-danger);  color: #fff; }
-.flux-status-dot.is-skipped  { opacity: .4; }
-
-@keyframes dot-pulse {
-  0%,100% { border-color: var(--flux-accent); box-shadow: 0 0 0 0 rgba(88,166,255,.4); }
-  50%      { box-shadow: 0 0 0 4px rgba(88,166,255,0); }
+.flux-logo:hover { opacity: .75; color: var(--bs-body-color); }
+.flux-logo-icon {
+  width: 20px; height: 20px;
+  background: linear-gradient(135deg, #f7c948 0%, #e08200 100%);
+  border-radius: 5px;
+  display: grid; place-items: center;
+  font-size: 12px; color: #000; font-weight: 800;
 }
 
-/* ── Header run badge ─────────────────────────────────────────────────────── */
-.flux-run-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 3px 10px;
+.flux-breadcrumb {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--bs-secondary-color); min-width: 0;
+}
+.flux-breadcrumb .sep { opacity: .4; }
+.flux-breadcrumb .crumb {
+  color: var(--bs-body-color); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+}
+
+/* ── Status badge ─────────────────────────────────────────────────────────── */
+.flux-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600;
+  padding: 4px 10px 4px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--bs-border-color);
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+  transition: color .2s, border-color .2s;
+  font-family: var(--font-ui);
+}
+.flux-badge-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0;
+}
+.flux-badge[data-status="running"]  { color: var(--flux-accent); border-color: var(--flux-accent-border); }
+.flux-badge[data-status="running"] .flux-badge-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+.flux-badge[data-status="success"]  { color: var(--flux-success); border-color: var(--flux-success-border); }
+.flux-badge[data-status="failure"]  { color: var(--flux-danger);  border-color: var(--flux-danger-border); }
+@keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.8); } }
+
+/* ── Header buttons ───────────────────────────────────────────────────────── */
+.flux-hbtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 6px;
   border: 1px solid var(--bs-border-color);
   background: transparent;
   color: var(--bs-secondary-color);
-  transition: all .2s;
+  cursor: pointer; font-family: var(--font-ui);
+  transition: color .15s, background .15s, border-color .15s;
+  white-space: nowrap;
 }
-.flux-run-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--bs-secondary-color);
-  flex-shrink: 0;
+.flux-hbtn:hover:not(:disabled) { color: var(--bs-body-color); background: var(--bs-secondary-bg); border-color: var(--bs-secondary-color); }
+.flux-hbtn:disabled { opacity: .4; cursor: not-allowed; }
+.flux-hbtn i { font-size: 13px; }
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+.flux-layout { display: flex; height: calc(100vh - 48px); overflow: hidden; }
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+.flux-sidebar {
+  width: 260px; min-width: 260px;
+  background: var(--flux-sidebar-bg);
+  border-right: 1px solid var(--bs-border-color);
+  display: flex; flex-direction: column;
+  overflow: hidden;
 }
-.flux-run-badge[data-status="running"]  { border-color: var(--flux-accent); color: var(--flux-accent); }
-.flux-run-badge[data-status="running"] .flux-run-dot { background: var(--flux-accent); animation: dot-pulse 1.5s infinite; }
-.flux-run-badge[data-status="success"]  { border-color: var(--flux-success); color: var(--flux-success); }
-.flux-run-badge[data-status="success"] .flux-run-dot { background: var(--flux-success); }
-.flux-run-badge[data-status="failure"]  { border-color: var(--flux-danger); color: var(--flux-danger); }
-.flux-run-badge[data-status="failure"] .flux-run-dot { background: var(--flux-danger); }
+.flux-sidebar-scroll { flex: 1; overflow-y: auto; padding: 12px 10px 8px; }
 
-/* ── Main area ────────────────────────────────────────────────────────────── */
-.flux-main { background: var(--bs-body-bg); }
+.flux-sidebar-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--bs-secondary-color);
+  margin-bottom: 6px; padding: 0 4px;
+}
+.flux-sidebar-empty {
+  font-size: 12px; color: var(--bs-secondary-color);
+  font-style: italic; padding: 4px;
+}
 
+/* ── Job list item ────────────────────────────────────────────────────────── */
+.fx-job-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 6px; cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .1s, border-color .1s;
+  margin-bottom: 2px; min-width: 0;
+}
+.fx-job-item:hover { background: var(--flux-sidebar-hover); }
+.fx-job-item.is-active { background: var(--flux-accent-bg); border-color: var(--flux-accent-border); }
+
+.fx-job-label { flex: 1; min-width: 0; }
+.fx-job-name {
+  font-size: 13px; font-weight: 500; color: var(--bs-body-color);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+}
+.fx-job-meta {
+  font-size: 11px; color: var(--bs-secondary-color);
+  display: block; margin-top: 1px;
+  font-family: var(--font-mono);
+}
+
+/* ── Job status icon ──────────────────────────────────────────────────────── */
+.fx-job-icon {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center; flex-shrink: 0;
+  font-size: 10px; font-weight: 700;
+  border: 1.5px solid var(--flux-muted); color: transparent;
+  transition: all .2s; position: relative;
+}
+.fx-job-icon.is-running { border-color: var(--flux-accent); color: var(--flux-accent); }
+.fx-job-icon.is-running::after {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1.5px solid var(--flux-accent); opacity: 0;
+  animation: ring-out 1.5s ease-out infinite;
+}
+.fx-job-icon.is-success { background: var(--flux-success); border-color: var(--flux-success); color: #fff; }
+.fx-job-icon.is-failure { background: var(--flux-danger);  border-color: var(--flux-danger);  color: #fff; }
+.fx-job-icon.is-skipped { border-color: var(--flux-muted); color: var(--bs-secondary-color); opacity: .45; }
+@keyframes ring-out { 0% { transform:scale(1); opacity:.5; } 100% { transform:scale(2); opacity:0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Sidebar run info footer ──────────────────────────────────────────────── */
+.flux-run-info {
+  margin-top: auto; padding: 10px 14px;
+  border-top: 1px solid var(--bs-border-color);
+  font-size: 11.5px; color: var(--bs-secondary-color);
+}
+.flux-run-info-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 2.5px 0; gap: 8px;
+}
+.flux-run-info-val {
+  color: var(--bs-body-color); font-weight: 500;
+  font-family: var(--font-mono); font-size: 11px;
+  text-align: right; max-width: 130px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── Main ─────────────────────────────────────────────────────────────────── */
+.flux-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
 .flux-toolbar {
-  height: 42px;
-  flex-shrink: 0;
-  background: var(--flux-toolbar-bg);
+  height: 44px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--bs-border-color);
+  background: var(--flux-header-bg);
 }
+.flux-toolbar-title {
+  font-size: 13px; font-weight: 600; color: var(--bs-body-color);
+  flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.flux-toolbar-sub { font-size: 11.5px; color: var(--bs-secondary-color); font-family: var(--font-mono); margin-left: 4px; }
+
+/* ── Progress bar ─────────────────────────────────────────────────────────── */
+.flux-progress { height: 2px; background: var(--bs-border-color); flex-shrink: 0; }
+.flux-progress-fill { height: 100%; background: var(--flux-accent); transition: width .5s ease; }
+.flux-progress-fill.done   { background: var(--flux-success); }
+.flux-progress-fill.failed { background: var(--flux-danger); }
 
 /* ── Search ───────────────────────────────────────────────────────────────── */
-.search-wrap { position: relative; }
-.search-icon {
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--bs-secondary-color);
-  font-size: 12px;
-  pointer-events: none;
-}
+.flux-search-wrap { position: relative; flex-shrink: 0; }
+.flux-search-icon { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--bs-secondary-color); pointer-events: none; }
 .flux-search {
-  padding-left: 28px;
-  width: 200px;
-  font-size: 13px;
-  background: var(--bs-body-bg);
-  border-color: var(--bs-border-color);
-  color: var(--bs-body-color);
+  width: 190px; height: 28px;
+  padding: 0 8px 0 26px;
+  background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);
+  border-radius: 6px; font-size: 12px; color: var(--bs-body-color);
+  font-family: var(--font-ui); outline: none;
+  transition: border-color .15s, box-shadow .15s;
 }
-.flux-search:focus {
-  background: var(--bs-body-bg);
-  border-color: var(--flux-accent);
-  box-shadow: 0 0 0 3px var(--flux-accent-subtle);
-  color: var(--bs-body-color);
+.flux-search:focus { border-color: var(--flux-accent); box-shadow: 0 0 0 3px var(--flux-accent-bg); }
+.flux-search::placeholder { color: var(--bs-secondary-color); }
+
+/* ── Toolbar small buttons ────────────────────────────────────────────────── */
+.flux-tbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 5px;
+  border: 1px solid var(--bs-border-color); background: transparent;
+  color: var(--bs-secondary-color); cursor: pointer; font-size: 13px;
+  transition: color .1s, background .1s, border-color .1s; flex-shrink: 0;
 }
+.flux-tbtn:hover { color: var(--bs-body-color); background: var(--bs-secondary-bg); border-color: var(--bs-secondary-color); }
+.flux-tbtn.active { color: var(--flux-accent); border-color: var(--flux-accent-border); background: var(--flux-accent-bg); }
 
-/* ── Steps container ──────────────────────────────────────────────────────── */
-.steps-wrap { gap: 4px; }
+/* ── Steps scroll area ────────────────────────────────────────────────────── */
+.flux-steps { flex: 1; overflow-y: auto; }
 
-/* ── Step accordion (<details>) ───────────────────────────────────────────── */
+/* ── Job group header ─────────────────────────────────────────────────────── */
+.fx-job-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px 8px;
+  position: sticky; top: 0; z-index: 10;
+  background: var(--bs-body-bg);
+  border-bottom: 1px solid var(--bs-border-color);
+}
+.fx-job-header + .fx-job-header { border-top: 1px solid var(--bs-border-color); }
+.fx-job-header-icon { font-size: 15px; flex-shrink: 0; }
+.fx-job-header-icon.is-running  { color: var(--flux-accent); animation: spin .9s linear infinite; }
+.fx-job-header-icon.is-success  { color: var(--flux-success); }
+.fx-job-header-icon.is-failure  { color: var(--flux-danger); }
+.fx-job-header-icon.is-skipped  { color: var(--bs-secondary-color); }
+.fx-job-header-icon.is-pending  { color: var(--flux-muted); }
+.fx-job-header-name { font-size: 14px; font-weight: 600; color: var(--bs-body-color); flex: 1; min-width: 0; }
+.fx-job-header-dur  { font-size: 11.5px; color: var(--bs-secondary-color); font-family: var(--font-mono); }
+.fx-job-header-progress { font-size: 11px; color: var(--bs-secondary-color); font-family: var(--font-mono); }
+
+/* ── Steps section padding ────────────────────────────────────────────────── */
+.fx-steps-pad { padding: 6px 8px; }
+
+/* ── Step accordion ───────────────────────────────────────────────────────── */
 .flux-step {
-  border: 1px solid var(--bs-border-color);
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--flux-step-bg);
-  margin-bottom: 4px;
-  transition: border-color .15s;
+  border: none; background: transparent;
+  margin: 0 0 2px; border-radius: 6px; overflow: hidden;
 }
-.flux-step[data-status="running"]  { border-color: var(--flux-accent); }
-.flux-step[data-status="success"]  { border-color: rgba(63,185,80,.4); }
-.flux-step[data-status="failure"]  { border-color: rgba(248,81,73,.5); }
 
 .flux-step-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  user-select: none;
-  list-style: none;
-  min-height: 38px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px 6px 12px; cursor: pointer;
+  user-select: none; list-style: none; min-height: 36px;
+  border-radius: 6px; transition: background .1s;
 }
 .flux-step-summary::-webkit-details-marker { display: none; }
-.flux-step-summary:hover { background: var(--flux-step-hover-bg); }
+.flux-step-summary:hover { background: var(--bs-secondary-bg); }
+.flux-step[open] > .flux-step-summary { background: var(--bs-secondary-bg); border-radius: 6px 6px 0 0; }
 
-.flux-step-chevron {
-  color: var(--bs-secondary-color);
-  transition: transform .2s;
+/* ── Step status icon (inline circle) ────────────────────────────────────── */
+.flux-step-ico {
+  width: 17px; height: 17px; border-radius: 50%;
+  display: grid; place-items: center; flex-shrink: 0;
+  font-size: 9px; font-weight: 800;
+  border: 1.5px solid var(--flux-muted); color: transparent;
+  transition: all .2s;
+}
+.flux-step-ico.is-pending  { border-color: var(--flux-muted); }
+.flux-step-ico.is-running  { border-color: var(--flux-accent); color: var(--flux-accent); animation: spin .9s linear infinite; }
+.flux-step-ico.is-success  { background: var(--flux-success); border-color: var(--flux-success); color: #fff; }
+.flux-step-ico.is-failure  { background: var(--flux-danger);  border-color: var(--flux-danger);  color: #fff; }
+.flux-step-ico.is-skipped  { border-color: var(--flux-muted); opacity: .4; }
+
+/* ── Phase tags ───────────────────────────────────────────────────────────── */
+.flux-phase-tag {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .5px;
+  padding: 1px 5px; border-radius: 3px; text-transform: uppercase;
   flex-shrink: 0;
-  font-size: 12px;
+}
+.flux-phase-tag.pre  { background: var(--flux-warning-bg); color: var(--flux-warning); border: 1px solid rgba(210,153,34,.25); }
+.flux-phase-tag.post { background: rgba(188,140,255,.08); color: var(--ansi-magenta); border: 1px solid rgba(188,140,255,.25); }
+
+.flux-step-name {
+  flex: 1; font-size: 13px; font-weight: 500; color: var(--bs-body-color);
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.flux-step-dur {
+  font-size: 11.5px; font-family: var(--font-mono);
+  color: var(--bs-secondary-color); flex-shrink: 0; margin-left: auto;
+}
+.flux-step-chevron {
+  color: var(--bs-secondary-color); font-size: 10px;
+  transition: transform .2s; flex-shrink: 0; margin-left: 4px;
 }
 .flux-step[open] .flux-step-chevron { transform: rotate(90deg); }
 
-.flux-step-name {
-  flex: 1;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--bs-body-color);
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Phase badge: PRE / POST */
-.flux-phase-badge {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .5px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-.flux-phase-pre  { background: rgba(210,153,34,.15); color: var(--flux-warning); border: 1px solid rgba(210,153,34,.3); }
-.flux-phase-post { background: rgba(188,140,255,.12); color: var(--ansi-magenta); border: 1px solid rgba(188,140,255,.3); }
-
-.flux-step-duration {
-  font-family: var(--bs-font-monospace);
-  font-size: 11px;
-  color: var(--bs-secondary-color);
-  flex-shrink: 0;
-}
-
-/* ── Step status icon (inside summary) ───────────────────────────────────── */
-.flux-step-icon { flex-shrink: 0; font-size: 14px; }
-.flux-step-icon.is-pending  { color: var(--flux-muted); }
-.flux-step-icon.is-running  { color: var(--flux-accent); animation: spin .9s linear infinite; }
-.flux-step-icon.is-success  { color: var(--flux-success); }
-.flux-step-icon.is-failure  { color: var(--flux-danger); }
-.flux-step-icon.is-skipped  { color: var(--flux-muted); opacity: .5; }
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
 /* ── Log body ─────────────────────────────────────────────────────────────── */
 .flux-log-body {
-  border-top: 1px solid var(--bs-border-color);
   background: var(--flux-log-bg);
+  border-top: 1px solid var(--bs-border-color);
+  border-radius: 0 0 6px 6px;
   overflow: hidden;
+  font-family: var(--font-mono);
 }
 .flux-log-body:empty { display: none; }
 
+/* ── Log line ─────────────────────────────────────────────────────────────── */
 .flux-log-line {
-  display: flex;
-  align-items: flex-start;
-  min-height: 20px;
-  font-family: var(--bs-font-monospace);
-  font-size: 12px;
-  line-height: 20px;
+  display: flex; align-items: flex-start;
+  min-height: 22px; line-height: 22px;
+  font-size: 12.5px; position: relative;
+  transition: background .05s;
 }
-.flux-log-line:hover { background: rgba(127,127,127,.05); }
-.flux-log-line.is-hidden { display: none !important; }
-.flux-log-line.is-match  { background: rgba(210,153,34,.08); }
+.flux-log-line:hover { background: rgba(127,127,127,.04); }
+.flux-log-line.is-hidden  { display: none !important; }
+.flux-log-line.is-match   { background: rgba(210,153,34,.07) !important; }
+.flux-log-line.is-match::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px; background: var(--flux-warning);
+}
 
 .flux-lineno {
-  flex-shrink: 0;
-  min-width: 44px;
-  padding: 0 10px 0 4px;
-  text-align: right;
+  flex-shrink: 0; min-width: 50px;
+  padding: 0 14px 0 8px; text-align: right;
   color: var(--flux-lineno-color);
   user-select: none;
+  background: var(--flux-log-gutter);
   border-right: 1px solid var(--bs-border-color);
+  font-size: 11.5px;
+  transition: color .1s;
 }
+.flux-log-line:hover .flux-lineno { color: var(--bs-secondary-color); }
 
 .flux-log-ts {
-  flex-shrink: 0;
-  width: 90px;
-  padding: 0 8px;
-  color: var(--flux-ts-color);
-  user-select: none;
-  font-size: 11px;
+  flex-shrink: 0; width: 84px; padding: 0 8px;
+  color: var(--flux-lineno-color); user-select: none;
+  font-size: 11px; display: none;
 }
+.show-ts .flux-log-ts { display: block; }
 
 .flux-log-content {
-  flex: 1;
-  padding: 0 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
+  flex: 1; padding: 0 16px;
+  white-space: pre-wrap; word-break: break-all;
   color: var(--bs-body-color);
 }
 .flux-log-line[data-type="stderr"] .flux-log-content { color: var(--flux-warning); }
 .flux-log-line[data-type="cmd"]    .flux-log-content { color: var(--flux-cmd-color); font-style: italic; }
 
-/* ── Drop zone ────────────────────────────────────────────────────────────── */
-.flux-dropzone-outer { background: var(--bs-body-bg); }
+/* ── Copy button ──────────────────────────────────────────────────────────── */
+.flux-log-copy {
+  display: none; position: absolute; right: 8px; top: 50%;
+  transform: translateY(-50%);
+  background: var(--bs-secondary-bg); border: 1px solid var(--bs-border-color);
+  border-radius: 4px; padding: 0 6px;
+  font-size: 10.5px; color: var(--bs-secondary-color);
+  cursor: pointer; line-height: 18px; font-family: var(--font-ui);
+  transition: color .1s; z-index: 1;
+}
+.flux-log-copy:hover { color: var(--bs-body-color); }
+.flux-log-line:hover .flux-log-copy { display: block; }
+
+/* ── Failure annotation ───────────────────────────────────────────────────── */
+.flux-annotation {
+  margin: 4px 0 2px; padding: 8px 12px;
+  border-radius: 6px; font-size: 12.5px;
+  display: flex; align-items: flex-start; gap: 8px;
+  border-left: 2px solid;
+}
+.flux-annotation.err {
+  background: var(--flux-danger-bg); border-color: var(--flux-danger);
+}
+.flux-annotation .ann-ico { color: var(--flux-danger); flex-shrink: 0; margin-top: 1px; }
+.flux-annotation .ann-body { color: var(--bs-body-color); font-family: var(--font-mono); font-size: 12px; }
+
+/* ── Landing ──────────────────────────────────────────────────────────────── */
+.flux-landing {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: var(--bs-body-bg); padding: 24px;
+}
+.flux-landing-inner { max-width: 500px; width: 100%; }
 
 .flux-dropzone {
-  max-width: 420px;
-  width: 100%;
-  padding: 48px 40px;
-  border: 1.5px dashed var(--bs-border-color);
-  border-radius: 10px;
-  transition: border-color .2s, background .2s;
+  padding: 48px 40px; border: 1.5px dashed var(--bs-border-color);
+  border-radius: 10px; text-align: center; cursor: pointer;
+  transition: border-color .2s, background .2s; margin-bottom: 20px;
 }
-.flux-dropzone.is-over {
-  border-color: var(--flux-accent);
-  background: var(--flux-accent-subtle);
+.flux-dropzone:hover, .flux-dropzone.is-over {
+  border-color: var(--flux-accent); background: var(--flux-accent-bg);
 }
-.flux-dz-icon { font-size: 36px; color: var(--bs-secondary-color); }
+.flux-dz-icon { font-size: 38px; color: var(--bs-secondary-color); margin-bottom: 14px; }
+.flux-dz-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.flux-dz-sub  { font-size: 13px; color: var(--bs-secondary-color); margin-bottom: 20px; }
+
+.flux-example-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--bs-secondary-color); margin-bottom: 8px;
+}
+.flux-example-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 6px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-secondary-bg);
+  color: var(--bs-body-color); text-decoration: none;
+  font-size: 13px; font-weight: 500; margin-bottom: 4px;
+  transition: border-color .15s, background .15s;
+}
+.flux-example-link:hover {
+  border-color: var(--flux-accent-border); background: var(--flux-accent-bg); color: var(--bs-body-color);
+}
 
 /* ── Scrollbars ───────────────────────────────────────────────────────────── */
-::-webkit-scrollbar          { width: 8px; height: 8px; }
-::-webkit-scrollbar-track    { background: transparent; }
-::-webkit-scrollbar-thumb    { background: var(--bs-border-color); border-radius: 4px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bs-border-color); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--bs-secondary-color); }
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .flux-sidebar  { display: none; }
-  .flux-search   { width: 140px; }
+  .flux-sidebar { display: none; }
+  .flux-search  { width: 140px; }
 }
-
-/* ── Job duration in sidebar ─────────────────────────────────────────────── */
-.flux-job-dur {
-  font-size: 11px;
-  font-family: var(--bs-font-monospace);
-  flex-shrink: 0;
-}
-
-/* ── Step summary: ensure chevron always on far right ───────────────────── */
-.flux-step-duration { margin-left: auto; }
-
-/* ── Landing page ─────────────────────────────────────────────────────────── */
-.flux-dropzone {
-  border: 1.5px dashed var(--bs-border-color);
-  border-radius: 10px;
-  transition: border-color .2s, background .2s;
-  cursor: pointer;
-}
-.flux-dropzone:hover { border-color: var(--flux-accent); }
-.flux-dropzone.is-over {
-  border-color: var(--flux-accent);
-  background: var(--flux-accent-subtle);
-}
-
-.flux-example-link {
-  background: var(--bs-secondary-bg);
-  border-color: var(--bs-border-color) !important;
-  color: var(--bs-body-color);
-  transition: background .15s, border-color .15s;
-}
-.flux-example-link:hover {
-  background: var(--bs-tertiary-bg);
-  border-color: var(--flux-accent) !important;
-  color: var(--bs-body-color);
-}
-
-/* ── Run badge (fix class name — was flux-run-badge, now run-badge) ─────── */
-.run-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 20px;
-  border: 1px solid var(--bs-border-color);
-  background: transparent;
-  color: var(--bs-secondary-color);
-  transition: all .25s;
-}
-.run-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--bs-secondary-color);
-  flex-shrink: 0;
-}
-.run-badge[data-status="running"]  { border-color: var(--flux-accent); color: var(--flux-accent); }
-.run-badge[data-status="running"] .run-dot { background: var(--flux-accent); animation: dot-pulse 1.5s infinite; }
-.run-badge[data-status="success"]  { border-color: var(--flux-success); color: var(--flux-success); }
-.run-badge[data-status="success"] .run-dot { background: var(--flux-success); }
-.run-badge[data-status="failure"]  { border-color: var(--flux-danger); color: var(--flux-danger); }
-.run-badge[data-status="failure"] .run-dot { background: var(--flux-danger); }

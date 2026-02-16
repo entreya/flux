@@ -91,7 +91,7 @@ class CommandRunner
                             }
                         }
 
-                        if (feof($stream) || ($chunk === false && feof($stream))) {
+                        if (feof($stream) || $chunk === false) {
                             unset($openPipes[$id]);
                         }
                     }

@@ -83,7 +83,11 @@ class CommandValidator
 
         // 3. For single-line commands, optionally enforce allowlist
         if ($this->useAllowlist && !empty($this->allowedCommands)) {
-            $baseName = basename(explode(' ', $command)[0]);
+            // Extract the binary token, handling: quoted paths, paths with spaces, env prefixes.
+            // e.g. `php yii foo` → "php", `/usr/bin/php yii` → "php", `"php" yii` → "php"
+            preg_match('/^(?:"([^"]+)"|\'([^\']+)\'|(\S+))/', $command, $m);
+            $binary   = $m[1] ?? $m[2] ?? $m[3] ?? '';
+            $baseName = basename($binary);
 
             if (!in_array($baseName, $this->allowedCommands, strict: true)) {
                 throw new SecurityException(

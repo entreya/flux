@@ -28,7 +28,12 @@ class YamlParser
             throw new ParseException("Workflow file not found or not readable: $path");
         }
 
-        return $this->parse(file_get_contents($path));
+        $contents = file_get_contents($path);
+        if ($contents === false) {
+            throw new ParseException("Could not read workflow file (I/O error): $path");
+        }
+
+        return $this->parse($contents);
     }
 
     /**

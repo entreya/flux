@@ -1,5 +1,5 @@
 /**
- * FluxUI — Real-time workflow log viewer
+ * FluxUI — Real-time GitHub Actions-style workflow viewer
  * entreya/flux
  *
  * Public API:
@@ -7,38 +7,49 @@
  *   FluxUI.rerun()         — reset UI and reconnect SSE
  *   FluxUI.toggleTheme()   — dark ↔ light
  *   FluxUI.expandAll()     — expand all step accordions
+ *   FluxUI.collapseAll()   — collapse all step accordions
  */
-
 const FluxUI = (() => {
 
   // ── State ────────────────────────────────────────────────────────────────
-  let es        = null;
-  let cfg       = {};
-  let lineIdx   = {};   // { "jobId-stepKey": lineNumber }
-  let stepFails = {};   // { "jobId-stepKey": true }
-  let jobTimers = {};   // { jobId: startTimestamp }
+  let es         = null;
+  let cfg        = {};
+  let lineIdx    = {};   // { "jobId-stepKey": lineNumber }
+  let stepFails  = {};   // { "jobId-stepKey": true }
+  let jobTimers  = {};   // { jobId: startMs }
+  let wfStart    = null; // workflow start timestamp
+  let wfTimer    = null; // setInterval handle for elapsed timer
+  let jobTotal   = 0;    // total jobs expected
+  let jobsDone   = 0;    // jobs completed (success or failure)
+  let showTs     = false;// timestamp toggle state
+  let jobIds     = {};   // { jobId: true } for maintaining order
 
-  // ── DOM helpers ──────────────────────────────────────────────────────────
-  const $  = id => document.getElementById(id);
-  const el = (tag, cls = '', attrs = {}) => {
+  // ── DOM ──────────────────────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+
+  function el(tag, cls, attrs = {}) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
     return e;
+  }
+
+  // Step status → Bootstrap Icon class + inner char
+  const STEP_ICONS = {
+    pending: { cls: '',         char: '' },
+    running: { cls: '',         char: '↻' },
+    success: { cls: '',         char: '✓' },
+    failure: { cls: '',         char: '✕' },
+    skipped: { cls: '',         char: '–' },
   };
 
-  // Bootstrap Icons (bi-*) mapped to status
-  const ICONS = {
-    pending: 'bi-circle',
-    running: 'bi-arrow-repeat',
-    success: 'bi-check-circle-fill',
-    failure: 'bi-x-circle-fill',
-    skipped: 'bi-dash-circle',
+  const JOB_ICON_CHARS = {
+    running: '↻', success: '✓', failure: '✕', skipped: '–', pending: '',
   };
 
   const PHASE_HTML = {
-    pre:  '<span class="flux-phase-badge flux-phase-pre">pre</span>',
-    post: '<span class="flux-phase-badge flux-phase-post">post</span>',
+    pre:  '<span class="flux-phase-tag pre">pre</span>',
+    post: '<span class="flux-phase-tag post">post</span>',
     main: '',
   };
 
@@ -47,10 +58,9 @@ const FluxUI = (() => {
     if (es) { es.close(); es = null; }
     es = new EventSource(url);
 
-    // Helper: listen for a named server-sent event and JSON-parse its data safely
     const on = (name, fn) => es.addEventListener(name, e => {
-      if (!e.data) return; // guard: browser error events have no data
-      try { fn(JSON.parse(e.data)); } catch(err) { console.warn('[Flux] bad JSON in', name, err); }
+      if (!e.data) return;
+      try { fn(JSON.parse(e.data)); } catch (err) { console.warn('[Flux] bad JSON in', name, err); }
     });
 
     on('workflow_start',    onWorkflowStart);
@@ -63,87 +73,101 @@ const FluxUI = (() => {
     on('step_failure',      d => onStepDone(d, 'failure'));
     on('step_skipped',      onStepSkipped);
     on('log',               onLog);
-    on('workflow_complete', () => onWorkflowDone('success'));
-    on('workflow_failed',   d => onWorkflowDone('failure', d.message));
+    on('workflow_complete', () => onWorkflowEnd('success'));
+    on('workflow_failed',   d  => onWorkflowEnd('failure', d));
 
-    // Server-sent `error` event (named, has JSON data with a message field)
     es.addEventListener('error', e => {
-      if (!e.data) return; // ignore browser-level connection drops here
+      if (!e.data) return;
       try {
         const d = JSON.parse(e.data);
         console.error('[Flux server error]', d.message);
-        setRunBadge('failure');
+        setBadge('failure');
         enableRerun();
-        // Stop reconnecting — this is a fatal server error (auth, not found, etc.)
         es.close();
       } catch {}
     });
 
-    // stream_close = server intentionally ended the stream
-    es.addEventListener('stream_close', () => es.close());
+    es.addEventListener('stream_close', () => {
+      if (es) es.close();
+    });
 
-    // Browser-level connection error (network issue, server down, etc.)
-    // EventSource will auto-retry — we just update the badge.
-    // If it stays CLOSED, enable the rerun button.
     es.onerror = () => {
       setTimeout(() => {
         if (es && es.readyState === EventSource.CLOSED) {
-          setRunBadge('failure');
+          setBadge('failure');
           enableRerun();
         }
-      }, 1000);
+      }, 1500);
     };
   }
 
   // ── Workflow events ──────────────────────────────────────────────────────
   function onWorkflowStart(d) {
-    setRunBadge('running');
-    setText('fx-job-heading', d.name);
+    wfStart   = Date.now();
+    jobTotal  = d.job_count ?? 0;
+    jobsDone  = 0;
+
+    setBadge('running');
+    setToolbarTitle(d.name, '');
+
+    // Start the elapsed timer in the badge
+    clearInterval(wfTimer);
+    wfTimer = setInterval(() => {
+      const el = $('fx-badge-text');
+      if (el) el.textContent = 'Running · ' + formatDur((Date.now() - wfStart) / 1000);
+    }, 1000);
+
+    updateProgress();
   }
 
   function onJobStart(d) {
     jobTimers[d.id] = Date.now();
-    upsertJobItem(d.id, d.name, 'running');
-    setText('fx-job-heading', d.name);
+    upsertJobSidebarItem(d.id, d.name, 'running');
+    ensureJobHeader(d.id, d.name, d.pre_step_count, d.step_count, d.post_step_count);
+    setJobHeaderStatus(d.id, 'running');
+    setToolbarTitle(d.id, d.name);
   }
 
   function onJobDone(d, status) {
     const elapsed = jobTimers[d.id]
-      ? ((Date.now() - jobTimers[d.id]) / 1000).toFixed(1) + 's'
+      ? formatDur((Date.now() - jobTimers[d.id]) / 1000)
       : '';
 
-    setJobStatus(d.id, status);
+    jobsDone++;
+    setSidebarJobStatus(d.id, status, elapsed);
+    setJobHeaderStatus(d.id, status, elapsed);
+    updateProgress();
 
-    const durEl = $(`job-dur-${d.id}`);
-    if (durEl) durEl.textContent = elapsed;
-
-    addJobSeparator(d.id, d.name ?? d.id, elapsed, status === 'failure');
+    if (status === 'failure' && d.name) {
+      addAnnotation(d.id, `Job "${d.name}" failed`);
+    }
   }
 
   function onJobSkipped(d) {
-    upsertJobItem(d.id, d.name ?? d.id, 'skipped');
-    setJobStatus(d.id, 'skipped');
-    addJobSeparator(d.id, d.name ?? d.id, '', false, true);
+    upsertJobSidebarItem(d.id, d.name ?? d.id, 'skipped');
+    ensureJobHeader(d.id, d.name ?? d.id, 0, 0, 0);
+    setJobHeaderStatus(d.id, 'skipped', '');
+    jobsDone++;
+    updateProgress();
   }
 
   function onStepStart(d) {
     upsertStep(d.job, d.step, d.name, d.phase ?? 'main');
     setStepStatus(d.job, d.step, 'running');
+    bumpStepProgress(d.job);
   }
 
   function onStepDone(d, status) {
     setStepStatus(d.job, d.step, status, d.duration ?? null);
-
     if (status === 'failure') {
       stepFails[`${d.job}-${d.step}`] = true;
-      const stepEl = $(`step-${d.job}-${d.step}`);
-      if (stepEl) stepEl.open = true;
+      const s = $(`step-${d.job}-${d.step}`);
+      if (s) s.open = true;
     } else {
-      // Auto-collapse successful steps after a short pause
       setTimeout(() => {
-        const stepEl = $(`step-${d.job}-${d.step}`);
-        if (stepEl && !stepFails[`${d.job}-${d.step}`]) stepEl.open = false;
-      }, 900);
+        const s = $(`step-${d.job}-${d.step}`);
+        if (s && !stepFails[`${d.job}-${d.step}`]) s.open = false;
+      }, 800);
     }
   }
 
@@ -156,56 +180,114 @@ const FluxUI = (() => {
     appendLog(d.job, d.step, d.type, d.content);
   }
 
-  function onWorkflowDone(status) {
-    setRunBadge(status);
+  function onWorkflowEnd(status, d) {
+    clearInterval(wfTimer);
+    setBadge(status);
+
+    const dur = wfStart ? formatDur((Date.now() - wfStart) / 1000) : '';
+    const badgeEl = $('fx-badge-text');
+    if (badgeEl) badgeEl.textContent = (status === 'success' ? 'Completed' : 'Failed') + (dur ? ' · ' + dur : '');
+
+    // Mark remaining running jobs as success if workflow succeeded
     if (status === 'success') {
-      document.querySelectorAll('.flux-job-item[data-status="running"]')
-        .forEach(item => setJobStatus(item.dataset.jobId, 'success'));
+      document.querySelectorAll('.fx-job-item[data-status="running"]').forEach(item => {
+        setSidebarJobStatus(item.dataset.jobId, 'success', '');
+      });
     }
+
+    setProgressDone(status);
     if (es) es.close();
     enableRerun();
   }
 
   // ── Sidebar ──────────────────────────────────────────────────────────────
-  function upsertJobItem(id, name, status) {
+  function upsertJobSidebarItem(id, name, status) {
     const list = $('fx-job-list');
     if (!list) return;
 
-    // Clear placeholder on first job
     const ph = list.querySelector('.flux-sidebar-empty');
     if (ph) ph.remove();
 
     if ($(`job-item-${id}`)) return;
 
-    const item = el('div', 'flux-job-item', {
+    const item = el('div', 'fx-job-item', {
       id: `job-item-${id}`,
       'data-job-id': id,
       'data-status': status,
     });
     item.innerHTML = `
-      <span class="flux-status-dot" id="job-dot-${id}"></span>
-      <span class="flux-job-name">${esc(name)}</span>
-      <span class="flux-job-dur text-muted" id="job-dur-${id}"></span>
+      <div class="fx-job-icon ${status === 'running' ? 'is-running' : ''}" id="job-icon-${id}">${JOB_ICON_CHARS[status] || ''}</div>
+      <div class="fx-job-label">
+        <span class="fx-job-name">${esc(name)}</span>
+        <span class="fx-job-meta" id="job-meta-${id}">…</span>
+      </div>
     `;
     item.addEventListener('click', () => scrollToJob(id));
     list.appendChild(item);
-    setJobDot(id, status);
   }
 
-  function setJobStatus(id, status) {
+  function setSidebarJobStatus(id, status, elapsed) {
     const item = $(`job-item-${id}`);
     if (item) {
       item.dataset.status = status;
-      item.classList.toggle('is-active', status === 'running');
+      item.classList.toggle('is-active', false);
     }
-    setJobDot(id, status);
+
+    const icon = $(`job-icon-${id}`);
+    if (icon) {
+      icon.className = `fx-job-icon is-${status}`;
+      icon.textContent = JOB_ICON_CHARS[status] || '';
+    }
+
+    const meta = $(`job-meta-${id}`);
+    if (meta && elapsed) meta.textContent = elapsed;
+    else if (meta && status === 'skipped') meta.textContent = 'skipped';
   }
 
-  function setJobDot(id, status) {
-    const dot = $(`job-dot-${id}`);
-    if (!dot) return;
-    dot.className = `flux-status-dot is-${status}`;
-    dot.textContent = { success: '✓', failure: '✕', skipped: '–', pending: '', running: '' }[status] ?? '';
+  // ── Job header in main area ──────────────────────────────────────────────
+  function ensureJobHeader(id, name, preCount, stepCount, postCount) {
+    if ($(`job-header-${id}`)) return;
+
+    const steps = $('fx-steps');
+    if (!steps) return;
+
+    const group = el('div', '', { id: `job-group-${id}`, 'data-job-id': id });
+
+    const total = preCount + stepCount + postCount;
+    group.innerHTML = `
+      <div class="fx-job-header" id="job-header-${id}">
+        <i class="fx-job-header-icon bi bi-circle is-pending" id="jhdr-icon-${id}"></i>
+        <span class="fx-job-header-name">${esc(name)}</span>
+        <span class="fx-job-header-progress text-muted" id="jhdr-prog-${id}">0/${total} steps</span>
+        <span class="fx-job-header-dur" id="jhdr-dur-${id}"></span>
+      </div>
+      <div class="fx-steps-pad" id="job-steps-${id}"></div>
+    `;
+    steps.appendChild(group);
+  }
+
+  function setJobHeaderStatus(id, status, elapsed) {
+    const icon = $(`jhdr-icon-${id}`);
+    if (icon) {
+      const iconMap = { pending: 'bi-circle', running: 'bi-arrow-repeat', success: 'bi-check-circle-fill', failure: 'bi-x-circle-fill', skipped: 'bi-dash-circle' };
+      icon.className = `fx-job-header-icon bi ${iconMap[status] || 'bi-circle'} is-${status}`;
+    }
+
+    if (elapsed !== undefined) {
+      const dur = $(`jhdr-dur-${id}`);
+      if (dur) dur.textContent = elapsed;
+    }
+  }
+
+  function bumpStepProgress(jobId) {
+    const prog = $(`jhdr-prog-${jobId}`);
+    if (!prog) return;
+    const m = prog.textContent.match(/(\d+)\/(\d+)/);
+    if (m) {
+      const done = parseInt(m[1]) + 1;
+      const total = parseInt(m[2]);
+      prog.textContent = `${done}/${total} steps`;
+    }
   }
 
   // ── Steps ────────────────────────────────────────────────────────────────
@@ -213,8 +295,8 @@ const FluxUI = (() => {
     const id = `step-${jobId}-${stepKey}`;
     if ($(id)) return;
 
-    const steps = $('fx-steps');
-    if (!steps) return;
+    const container = $(`job-steps-${jobId}`);
+    if (!container) return;
 
     const details = el('details', 'flux-step', {
       id,
@@ -226,51 +308,33 @@ const FluxUI = (() => {
 
     details.innerHTML = `
       <summary class="flux-step-summary">
-        <i class="bi ${ICONS.pending} flux-step-icon is-pending" id="step-icon-${jobId}-${stepKey}"></i>
+        <div class="flux-step-ico is-pending" id="step-ico-${jobId}-${stepKey}"></div>
         ${PHASE_HTML[phase] ?? ''}
         <span class="flux-step-name">${esc(name)}</span>
-        <span class="flux-step-duration text-muted" id="step-dur-${jobId}-${stepKey}"></span>
-        <i class="bi bi-chevron-right flux-step-chevron ms-1"></i>
+        <span class="flux-step-dur" id="step-dur-${jobId}-${stepKey}"></span>
+        <i class="bi bi-chevron-right flux-step-chevron"></i>
       </summary>
       <div class="flux-log-body" id="logs-${jobId}-${stepKey}"></div>
     `;
 
-    steps.appendChild(details);
+    container.appendChild(details);
     details.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
-  function setStepStatus(jobId, stepKey, status, duration = null) {
+  function setStepStatus(jobId, stepKey, status, duration) {
     const stepEl = $(`step-${jobId}-${stepKey}`);
     if (stepEl) stepEl.dataset.status = status;
 
-    const icon = $(`step-icon-${jobId}-${stepKey}`);
-    if (icon) icon.className = `bi ${ICONS[status] ?? ICONS.pending} flux-step-icon is-${status}`;
-
-    if (duration !== null) {
-      const dur = $(`step-dur-${jobId}-${stepKey}`);
-      if (dur) dur.textContent = `${duration}s`;
+    const ico = $(`step-ico-${jobId}-${stepKey}`);
+    if (ico) {
+      ico.className = `flux-step-ico is-${status}`;
+      ico.textContent = STEP_ICONS[status]?.char || '';
     }
-  }
 
-  // ── Job separator line (between jobs, like GitHub Actions) ───────────────
-  function addJobSeparator(jobId, jobName, elapsed = '', failed = false, skipped = false) {
-    const steps = $('fx-steps');
-    if (!steps) return;
-
-    const color  = skipped ? 'var(--bs-secondary-color)' : failed ? 'var(--flux-danger)' : 'var(--flux-success)';
-    const icon   = skipped ? 'bi-dash-circle' : failed ? 'bi-x-circle-fill' : 'bi-check-circle-fill';
-    const label  = `${esc(jobName)}${elapsed ? ' · ' + elapsed : ''}`;
-
-    const sep = el('div', 'd-flex align-items-center gap-2 py-2 px-1');
-    sep.innerHTML = `
-      <div style="flex:1;height:1px;background:var(--bs-border-color)"></div>
-      <span class="small text-muted d-flex align-items-center gap-1">
-        <i class="bi ${icon}" style="color:${color};font-size:12px"></i>
-        ${label}
-      </span>
-      <div style="flex:1;height:1px;background:var(--bs-border-color)"></div>
-    `;
-    steps.appendChild(sep);
+    if (duration != null) {
+      const dur = $(`step-dur-${jobId}-${stepKey}`);
+      if (dur) dur.textContent = duration + 's';
+    }
   }
 
   // ── Log lines ─────────────────────────────────────────────────────────────
@@ -278,9 +342,9 @@ const FluxUI = (() => {
     const container = $(`logs-${jobId}-${stepKey}`);
     if (!container) return;
 
-    const key    = `${jobId}-${stepKey}`;
-    const num    = (lineIdx[key] = (lineIdx[key] ?? 0) + 1);
-    const ts     = new Date().toISOString().slice(11, 23);
+    const key = `${jobId}-${stepKey}`;
+    const num = (lineIdx[key] = (lineIdx[key] ?? 0) + 1);
+    const ts  = new Date().toISOString().slice(11, 23);
 
     const line = el('div', 'flux-log-line', { 'data-type': type });
     line.dataset.raw = content;
@@ -288,19 +352,54 @@ const FluxUI = (() => {
       <span class="flux-lineno">${num}</span>
       <span class="flux-log-ts">${ts}</span>
       <span class="flux-log-content">${content}</span>
+      <button class="flux-log-copy" onclick="FluxUI.copyLine(this)" title="Copy line">Copy</button>
     `;
 
     container.appendChild(line);
 
-    // Scroll the step area if near bottom
-    const steps = $('fx-steps');
-    if (steps && (steps.scrollHeight - steps.scrollTop) < steps.clientHeight + 150) {
-      steps.scrollTop = steps.scrollHeight;
+    // Auto-scroll if near bottom
+    const stepsEl = $('fx-steps');
+    if (stepsEl && (stepsEl.scrollHeight - stepsEl.scrollTop) < stepsEl.clientHeight + 200) {
+      stepsEl.scrollTop = stepsEl.scrollHeight;
     }
 
-    // Honour active search
     const term = $('fx-search')?.value.trim();
     if (term) filterLine(line, term);
+  }
+
+  // ── Failure annotation ────────────────────────────────────────────────────
+  function addAnnotation(jobId, message) {
+    const container = $(`job-steps-${jobId}`);
+    if (!container) return;
+
+    const ann = el('div', 'flux-annotation err');
+    ann.innerHTML = `
+      <i class="bi bi-exclamation-circle ann-ico"></i>
+      <span class="ann-body">${esc(message)}</span>
+    `;
+    container.appendChild(ann);
+  }
+
+  // ── Progress bar ──────────────────────────────────────────────────────────
+  function updateProgress() {
+    const bar = $('fx-progress');
+    if (!bar) return;
+    const pct = jobTotal > 0 ? (jobsDone / jobTotal) * 100 : 0;
+    bar.style.width = pct + '%';
+  }
+
+  function setProgressDone(status) {
+    const bar = $('fx-progress');
+    if (!bar) return;
+    bar.style.width = '100%';
+    bar.classList.toggle('done',   status === 'success');
+    bar.classList.toggle('failed', status === 'failure');
+  }
+
+  // ── Toolbar ───────────────────────────────────────────────────────────────
+  function setToolbarTitle(jobId, jobName) {
+    const t = $('fx-job-heading');
+    if (t) t.textContent = jobName || jobId;
   }
 
   // ── Search ────────────────────────────────────────────────────────────────
@@ -310,17 +409,17 @@ const FluxUI = (() => {
     let timer;
     input.addEventListener('input', () => {
       clearTimeout(timer);
-      timer = setTimeout(() => runSearch(input.value.trim()), 200);
+      timer = setTimeout(() => runSearch(input.value.trim()), 180);
     });
   }
 
   function runSearch(term) {
-    document.querySelectorAll('.flux-log-line').forEach(line => filterLine(line, term));
-    document.querySelectorAll('.flux-step').forEach(step => {
-      if (!term) { step.style.display = ''; return; }
-      const hits = step.querySelectorAll('.flux-log-line:not(.is-hidden)').length;
-      step.style.display = hits > 0 ? '' : 'none';
-      if (hits > 0) step.open = true;
+    document.querySelectorAll('.flux-log-line').forEach(l => filterLine(l, term));
+    document.querySelectorAll('.flux-step').forEach(s => {
+      if (!term) { s.style.display = ''; return; }
+      const hits = s.querySelectorAll('.flux-log-line:not(.is-hidden)').length;
+      s.style.display = hits > 0 ? '' : 'none';
+      if (hits > 0) s.open = true;
     });
   }
 
@@ -347,6 +446,7 @@ const FluxUI = (() => {
     ['dragleave','drop'].forEach(ev  => dz.addEventListener(ev, () => dz.classList.remove('is-over')));
     dz.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
     input?.addEventListener('change', () => handleFiles(input.files));
+    dz.addEventListener('click', () => input?.click());
   }
 
   function handleFiles(files) {
@@ -359,8 +459,8 @@ const FluxUI = (() => {
   function uploadFile(file) {
     const dz = $('fx-dropzone');
     if (dz) dz.innerHTML = `
-      <div class="flux-dz-icon mb-2"><i class="bi bi-arrow-repeat" style="font-size:36px;animation:spin .9s linear infinite"></i></div>
-      <p class="text-muted small">Uploading…</p>`;
+      <div class="flux-dz-icon"><i class="bi bi-arrow-repeat" style="animation:spin .9s linear infinite"></i></div>
+      <p class="flux-dz-sub">Uploading…</p>`;
     const fd = new FormData();
     fd.append('workflow_file', file);
     fetch(cfg.uploadUrl ?? 'upload.php', { method: 'POST', body: fd })
@@ -373,12 +473,13 @@ const FluxUI = (() => {
   }
 
   // ── Status badge ──────────────────────────────────────────────────────────
-  function setRunBadge(status) {
-    const badge = $('fx-status-badge');
+  function setBadge(status) {
+    const badge = $('fx-badge');
     if (!badge) return;
     badge.dataset.status = status;
     const labels = { pending: 'Connecting', running: 'Running', success: 'Completed', failure: 'Failed' };
-    badge.querySelector('.flux-run-text').textContent = labels[status] ?? status;
+    const textEl = $('fx-badge-text');
+    if (textEl) textEl.textContent = labels[status] ?? status;
   }
 
   // ── Rerun ─────────────────────────────────────────────────────────────────
@@ -387,15 +488,22 @@ const FluxUI = (() => {
     lineIdx   = {};
     stepFails = {};
     jobTimers = {};
+    jobTotal  = 0;
+    jobsDone  = 0;
+    wfStart   = null;
+    clearInterval(wfTimer);
 
     const list = $('fx-job-list');
-    if (list) list.innerHTML = `<div class="flux-sidebar-empty text-muted small fst-italic">Waiting for workflow…</div>`;
+    if (list) list.innerHTML = `<div class="flux-sidebar-empty">Waiting for workflow…</div>`;
 
     const steps = $('fx-steps');
     if (steps) steps.innerHTML = '';
 
-    setText('fx-job-heading', 'Initializing…');
-    setRunBadge('pending');
+    const prog = $('fx-progress');
+    if (prog) { prog.style.width = '0%'; prog.classList.remove('done','failed'); }
+
+    setToolbarTitle('', 'Initializing…');
+    setBadge('pending');
 
     const btn = $('fx-rerun-btn');
     if (btn) btn.disabled = true;
@@ -411,50 +519,75 @@ const FluxUI = (() => {
   // ── Theme ─────────────────────────────────────────────────────────────────
   function applyTheme(t) {
     document.documentElement.setAttribute('data-bs-theme', t);
-    localStorage.setItem('flux-theme', t);
+    try { localStorage.setItem('flux-theme', t); } catch {}
     const icon = $('fx-theme-icon');
-    if (icon) icon.className = t === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+    if (icon) icon.className = 'bi ' + (t === 'dark' ? 'bi-sun' : 'bi-moon-stars');
   }
 
   function toggleTheme() {
-    const cur = localStorage.getItem('flux-theme') ?? 'dark';
+    let cur = 'dark';
+    try { cur = localStorage.getItem('flux-theme') ?? 'dark'; } catch {}
     applyTheme(cur === 'dark' ? 'light' : 'dark');
   }
 
-  // ── Utilities ─────────────────────────────────────────────────────────────
+  // ── Timestamps toggle ─────────────────────────────────────────────────────
+  function toggleTimestamps() {
+    showTs = !showTs;
+    const stepsEl = $('fx-steps');
+    if (stepsEl) stepsEl.classList.toggle('show-ts', showTs);
+    const btn = $('fx-ts-btn');
+    if (btn) btn.classList.toggle('active', showTs);
+  }
+
+  // ── Expand / Collapse ─────────────────────────────────────────────────────
+  function expandAll()   { document.querySelectorAll('.flux-step').forEach(s => s.open = true); }
+  function collapseAll() { document.querySelectorAll('.flux-step').forEach(s => s.open = false); }
+
+  // ── Scroll to job ─────────────────────────────────────────────────────────
   function scrollToJob(jobId) {
-    const first = document.querySelector(`.flux-step[data-job="${jobId}"]`);
-    if (first) first.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    document.querySelectorAll('.flux-job-item').forEach(i => i.classList.remove('is-active'));
+    const group = $(`job-group-${jobId}`);
+    if (group) group.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelectorAll('.fx-job-item').forEach(i => i.classList.remove('is-active'));
     $(`job-item-${jobId}`)?.classList.add('is-active');
   }
 
-  function expandAll() {
-    document.querySelectorAll('.flux-step').forEach(s => { s.open = true; });
+  // ── Copy line ─────────────────────────────────────────────────────────────
+  function copyLine(btn) {
+    const line = btn.closest('.flux-log-line');
+    const text = line?.dataset.raw ?? line?.querySelector('.flux-log-content')?.textContent ?? '';
+    navigator.clipboard?.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = orig; }, 1200);
+    });
   }
 
-  function setText(id, text) {
-    const e = $(id);
-    if (e) e.textContent = text;
+  // ── Utilities ─────────────────────────────────────────────────────────────
+  function formatDur(secs) {
+    secs = Math.round(secs);
+    if (secs < 60) return secs + 's';
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
   }
 
   function esc(str) {
     return String(str ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
   function init(config) {
     cfg = config ?? {};
-    applyTheme(localStorage.getItem('flux-theme') ?? 'dark');
+    let theme = 'dark';
+    try { theme = localStorage.getItem('flux-theme') ?? 'dark'; } catch {}
+    applyTheme(theme);
     setupSearch();
     setupDropZone();
     if (cfg.sseUrl) connect(cfg.sseUrl);
   }
 
-  return { init, rerun, toggleTheme, expandAll };
+  return { init, rerun, toggleTheme, toggleTimestamps, expandAll, collapseAll, copyLine };
 
 })();

@@ -92,6 +92,10 @@ class FileChannel
     // TAIL mode — used by the SSE endpoint to stream to a browser
     // -------------------------------------------------------------------------
 
+    // Tail-mode constants
+    private const MAX_IDLE_SECONDS   = 300;   // give up after 5 min of no new data
+    private const POLL_INTERVAL_USEC = 200_000; // 200 ms between polls
+
     /**
      * Open the log file as an SSE stream.
      *
@@ -124,11 +128,13 @@ class FileChannel
             return;
         }
 
-        $handle   = fopen($this->path, 'r');
-        $idleTime = 0;
-        $maxIdle  = 300; // give up after 5 min of no data and no sentinel
+        $handle      = fopen($this->path, 'r');
+        // Track idle time in microseconds for accuracy — fixes the previous bug
+        // where counting 200ms ticks as "seconds" meant timeout fired at 60s, not 300s.
+        $idleUsec    = 0;
+        $maxIdleUsec = self::MAX_IDLE_SECONDS * 1_000_000;
 
-        while (!feof($handle) || $idleTime < $maxIdle) {
+        while (!feof($handle) || $idleUsec < $maxIdleUsec) {
             if (connection_aborted()) {
                 break;
             }
@@ -137,13 +143,13 @@ class FileChannel
 
             if ($line === false) {
                 // No new data yet — sleep and retry
-                usleep(200_000); // 200ms
-                $idleTime++;
+                usleep(self::POLL_INTERVAL_USEC);
+                $idleUsec += self::POLL_INTERVAL_USEC;
                 clearstatcache(true, $this->path);
                 continue;
             }
 
-            $idleTime = 0;
+            $idleUsec = 0; // reset idle counter on any new data
             $line     = rtrim($line);
 
             if ($line === '' ) {
