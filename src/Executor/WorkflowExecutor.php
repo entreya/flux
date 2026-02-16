@@ -7,6 +7,7 @@ namespace Entreya\Flux\Executor;
 use Entreya\Flux\Exceptions\FluxException;
 use Entreya\Flux\Pipeline\Job;
 use Entreya\Flux\Pipeline\Step;
+use Entreya\Flux\Utils\ExpressionEvaluator;
 
 /**
  * Executes a pipeline and yields structured events.
@@ -16,19 +17,30 @@ use Entreya\Flux\Pipeline\Step;
  *  2. main steps  — stop on first failure unless continue-on-error is set
  *  3. post steps  — ALWAYS execute, even when pre or main failed
  *
+ * Job isolation fix: a failing job no longer stops unrelated jobs.
+ * Only jobs whose `needs` includes a failed job ID are skipped.
+ * workflow_failed is emitted once at the end, after all jobs have run.
+ *
  * All step events carry a `phase` field: 'pre' | 'main' | 'post'
  */
 class WorkflowExecutor
 {
+    private ExpressionEvaluator $evaluator;
+
     public function __construct(
         private readonly CommandRunner $runner,
         private readonly array         $globalEnv = [],
-    ) {}
+        ?ExpressionEvaluator           $evaluator = null,
+    ) {
+        $this->evaluator = $evaluator ?? new ExpressionEvaluator();
+    }
 
     /** @return \Generator<array> */
     public function execute(string $name, array $jobs): \Generator
     {
-        $completedJobs = [];
+        $completedJobs  = [];  // job IDs that succeeded
+        $failedJobs     = [];  // job IDs that failed
+        $workflowFailed = false;
 
         yield $this->event('workflow_start', [
             'name'      => $name,
@@ -37,15 +49,34 @@ class WorkflowExecutor
         ]);
 
         foreach ($jobs as $jobId => $job) {
-            // Dependency check
+            // ── Dependency check ────────────────────────────────────────────
+            // Only skip this job if one of its explicitly-declared needs failed.
+            // Unrelated failures do NOT propagate (GitHub Actions behaviour).
+            $unmetNeeds = [];
             foreach ($job->getNeeds() as $needed) {
                 if (!in_array($needed, $completedJobs, true)) {
+                    $unmetNeeds[] = $needed;
+                }
+            }
+
+            if (!empty($unmetNeeds)) {
+                yield $this->event('job_skipped', [
+                    'id'     => $jobId,
+                    'name'   => $job->getName(),
+                    'reason' => "Required job(s) did not succeed: " . implode(', ', $unmetNeeds),
+                ]);
+                continue;
+            }
+
+            // ── Conditional check ────────────────────────────────────────────
+            if ($job->getIf()) {
+                if (!$this->evaluator->evaluate($job->getIf())) {
                     yield $this->event('job_skipped', [
                         'id'     => $jobId,
                         'name'   => $job->getName(),
-                        'reason' => "Dependency '$needed' did not succeed.",
+                        'reason' => "Condition evaluated to false: {$job->getIf()}",
                     ]);
-                    continue 2;
+                    continue;
                 }
             }
 
@@ -59,12 +90,12 @@ class WorkflowExecutor
 
             $jobFailed = false;
 
-            // ── Pre steps ─────────────────────────────────────────────────
+            // ── Pre steps ────────────────────────────────────────────────────
             foreach ($job->getPreSteps() as $index => $step) {
-                $stepKey  = "pre-$index";
-                $failed   = false;
+                $stepKey = "pre-$index";
+                $failed  = false;
 
-                foreach ($this->runStep($jobId, $stepKey, $step, $job, 'pre') as $event) {
+                foreach ($this->runStep($jobId, $stepKey, $step, $job, 'pre', $jobFailed) as $event) {
                     yield $event;
                     if ($event['event'] === 'step_failure' && !$step->isContinueOnError()) {
                         $failed = true;
@@ -73,17 +104,17 @@ class WorkflowExecutor
 
                 if ($failed) {
                     $jobFailed = true;
-                    break; // Stop remaining pre steps; skip main steps; post will still run
+                    break; // Stop remaining pre steps; skip main steps; post still runs
                 }
             }
 
-            // ── Main steps (skipped if pre failed) ────────────────────────
+            // ── Main steps (skipped if pre failed) ───────────────────────────
             if (!$jobFailed) {
                 foreach ($job->getSteps() as $index => $step) {
                     $stepKey = (string) $index;
                     $failed  = false;
 
-                    foreach ($this->runStep($jobId, $stepKey, $step, $job, 'main') as $event) {
+                    foreach ($this->runStep($jobId, $stepKey, $step, $job, 'main', $jobFailed) as $event) {
                         yield $event;
                         if ($event['event'] === 'step_failure' && !$step->isContinueOnError()) {
                             $failed = true;
@@ -97,34 +128,66 @@ class WorkflowExecutor
                 }
             }
 
-            // ── Post steps (ALWAYS run) ────────────────────────────────────
+            // ── Post steps (ALWAYS run, even after failures) ─────────────────
             foreach ($job->getPostSteps() as $index => $step) {
                 $stepKey = "post-$index";
-                foreach ($this->runStep($jobId, $stepKey, $step, $job, 'post') as $event) {
+                foreach ($this->runStep($jobId, $stepKey, $step, $job, 'post', $jobFailed) as $event) {
                     yield $event;
-                    // Post step failures are logged but don't change job status
+                    // Post-step failures are logged but do not change the job's outcome
                 }
             }
 
-            // ── Job outcome ───────────────────────────────────────────────
+            // ── Job outcome ──────────────────────────────────────────────────
             if ($jobFailed) {
-                yield $this->event('job_failure', ['id' => $jobId]);
-                yield $this->event('workflow_failed', [
-                    'message' => "Job '{$job->getName()}' failed.",
-                ]);
-                return;
+                $failedJobs[]   = $jobId;
+                $workflowFailed = true;
+                yield $this->event('job_failure', ['id' => $jobId, 'name' => $job->getName()]);
+                // DO NOT return — continue to the next job so independent jobs still run
+            } else {
+                $completedJobs[] = $jobId;
+                yield $this->event('job_success', ['id' => $jobId, 'name' => $job->getName()]);
             }
-
-            $completedJobs[] = $jobId;
-            yield $this->event('job_success', ['id' => $jobId, 'name' => $job->getName()]);
         }
 
-        yield $this->event('workflow_complete', []);
+        // ── Workflow outcome ─────────────────────────────────────────────────
+        // Emitted once, after ALL jobs (including their post-steps) have completed.
+        // Previously this was emitted mid-pipeline after the first failure, before
+        // post-steps had a chance to run (e.g. notifications, cache flushes).
+        if ($workflowFailed) {
+            yield $this->event('workflow_failed', [
+                'message'     => count($failedJobs) . ' job(s) failed.',
+                'failed_jobs' => $failedJobs,
+            ]);
+        } else {
+            yield $this->event('workflow_complete', []);
+        }
     }
 
     /** @return \Generator<array> */
-    private function runStep(string $jobId, string $stepKey, Step $step, Job $job, string $phase): \Generator
-    {
+    private function runStep(
+        string $jobId,
+        string $stepKey,
+        Step   $step,
+        Job    $job,
+        string $phase,
+        bool   $jobFailed = false,  // actual job status for conditional expressions
+    ): \Generator {
+        if ($step->getIf()) {
+            // Provide the real job status so success() / failure() expressions work correctly.
+            $context = ['status' => $jobFailed ? 'failure' : 'success'];
+
+            if (!$this->evaluator->evaluate($step->getIf(), $context)) {
+                yield $this->event('step_skipped', [
+                    'job'    => $jobId,
+                    'step'   => $stepKey,
+                    'phase'  => $phase,
+                    'name'   => $step->getName(),
+                    'reason' => "Condition evaluated to false: {$step->getIf()}",
+                ]);
+                return;
+            }
+        }
+
         if ($step->getCommand() === null) {
             yield $this->event('step_skipped', [
                 'job'    => $jobId,

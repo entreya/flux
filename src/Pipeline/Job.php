@@ -11,6 +11,7 @@ class Job
     private array $postSteps = [];
     private array $needs     = [];
     private array $env       = [];
+    private ?string $if      = null;
 
     public function __construct(
         private readonly string $id,
@@ -28,6 +29,7 @@ class Job
 
     public function setNeeds(array $needs): void { $this->needs = $needs; }
     public function setEnv(array $env): void     { $this->env   = $env;   }
+    public function setIf(?string $if): void     { $this->if    = $if;    }
 
     public function getId(): string       { return $this->id;        }
     public function getName(): string     { return $this->name;      }
@@ -36,4 +38,5 @@ class Job
     public function getPostSteps(): array { return $this->postSteps; }
     public function getNeeds(): array     { return $this->needs;     }
     public function getEnv(): array       { return $this->env;       }
+    public function getIf(): ?string      { return $this->if;        }
 }

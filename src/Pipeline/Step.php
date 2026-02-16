@@ -12,6 +12,7 @@ class Step
         private readonly array   $env             = [],
         private bool             $continueOnError = false,
         private readonly ?string $workingDir      = null,
+        private readonly ?string $if              = null,
     ) {}
 
     public function setContinueOnError(bool $value): void { $this->continueOnError = $value; }
@@ -21,4 +22,5 @@ class Step
     public function getEnv(): array       { return $this->env; }
     public function getWorkingDir(): ?string { return $this->workingDir; }
     public function isContinueOnError(): bool { return $this->continueOnError; }
+    public function getIf(): ?string      { return $this->if; }
 }

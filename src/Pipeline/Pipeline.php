@@ -11,6 +11,7 @@ use Entreya\Flux\Executor\WorkflowExecutor;
 use Entreya\Flux\Exceptions\FluxException;
 use Entreya\Flux\Security\AuthManager;
 use Entreya\Flux\Security\CommandValidator;
+use Entreya\Flux\Security\RateLimiter;
 
 /**
  * Fluent pipeline builder.
@@ -36,6 +37,7 @@ class Pipeline
     private array        $globalEnv = [];
     private array        $config    = [];
     private ?AuthManager $auth      = null;
+    private ?RateLimiter $rateLimiter = null;
 
     public function __construct(string $name)
     {
@@ -127,6 +129,7 @@ class Pipeline
         $job = new Job($id, $name);
         $job->setNeeds((array) ($data['needs'] ?? []));
         $job->setEnv($data['env'] ?? []);
+        $job->setIf($data['if'] ?? null);
         
         foreach ($data['pre'] ?? [] as $s) {
             $job->addPreStep(self::makeStep($s, $context));
@@ -154,6 +157,7 @@ class Pipeline
             env:             $s['env']  ?? [],
             continueOnError: (bool) ($s['continue-on-error'] ?? false),
             workingDir:      $s['working-directory'] ?? null,
+            if:              $s['if'] ?? null,
         );
     }
 
@@ -231,6 +235,16 @@ class Pipeline
     public function withConfig(array $config): self
     {
         $this->config = array_merge($this->config, $config);
+
+        // Wire up RateLimiter if rate_limit config is provided.
+        // Previously RateLimiter existed but was never instantiated anywhere.
+        if (isset($config['rate_limit'])) {
+            $this->rateLimiter = new RateLimiter(
+                maxPerHour: (int) ($config['rate_limit']['max_per_hour'] ?? 60),
+                storageDir: (string) ($config['rate_limit']['storage_dir'] ?? ''),
+            );
+        }
+
         return $this;
     }
 
@@ -240,6 +254,7 @@ class Pipeline
     {
         $this->commitActiveJob();
         $this->auth?->enforce();
+        $this->rateLimiter?->check($_SERVER['REMOTE_ADDR'] ?? 'cli');
 
         $channel  = new SseChannel();
         $executor = $this->buildExecutor();
@@ -256,6 +271,7 @@ class Pipeline
     public function writeToFile(string $path): void
     {
         $this->commitActiveJob();
+        $this->rateLimiter?->check('background');
 
         $channel  = new FileChannel($path, mode: FileChannel::MODE_WRITE);
         $executor = $this->buildExecutor();

@@ -1,0 +1,29 @@
+name: Conditional Test
+
+jobs:
+  job-1:
+    name: "Always Run"
+    steps:
+      - name: "Step 1"
+        run: echo "This should run"
+
+      - name: "Skipped Step"
+        if: ${{ 1 == 2 }}
+        run: echo "This should NOT run"
+
+      - name: "Conditional Step"
+        if: ${{ 1 == 1 }}
+        run: echo "This is conditional but true"
+
+  job-skipped:
+    name: "Skipped Job"
+    if: "false"
+    steps:
+      - run: echo "This job should be skipped entirely"
+
+  job-context:
+    name: "Context Test"
+    steps:
+      - name: "Check success()"
+        if: ${{ success() }}
+        run: echo "Previous steps succeeded"
