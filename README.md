@@ -190,6 +190,37 @@ jobs:
 
 ---
 
+## 🚀 Advanced Features
+
+### 1. Matrix Strategy
+Run a job multiple times with different variable combinations (e.g., testing against multiple PHP versions).
+
+```yaml
+jobs:
+  test:
+    name: Test PHP ${{ matrix.php }}
+    strategy:
+      matrix:
+        php: ['8.1', '8.2', '8.3']
+        os:  ['ubuntu', 'alpine']
+    steps:
+      - run: echo "Running on ${{ matrix.os }} with PHP ${{ matrix.php }}"
+```
+
+### 2. Inputs & Interpolation
+Define variable inputs with default values, overridable at runtime.
+
+```yaml
+inputs:
+  target:
+    default: "staging"
+
+jobs:
+  deploy:
+    steps:
+      - run: ./deploy.sh ${{ inputs.target }}
+```
+
 ## Security
 
 ### Command Allowlist
@@ -272,6 +303,13 @@ es.addEventListener('workflow_failed',  () => es.close());
 | `stream_close`     | _(empty)_                                |
 
 ---
+
+---
+
+## Framework Integration
+
+- [**Yii2 Integration Recipe**](docs/YII2_INTEGRATION.md) — Complete guide for Controller, View, and Background implementation.
+- **Laravel / Symfony**: Similar principles apply (use SSE headers and disable buffering).
 
 ## License
 
