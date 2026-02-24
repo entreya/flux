@@ -203,6 +203,19 @@ final class Ansi
     // ── Semantic helpers ──────────────────────────────────────────────────────
 
     /**
+     * Render a clickable link in supported terminals (OSC 8).
+     *
+     *   Ansi::link('https://entreya.com', 'Entreya');
+     */
+    public static function link(string $url, string $text): string
+    {
+        if (!self::isColorSupported()) {
+            return $text;
+        }
+        return "\e]8;;{$url}\e\\" . $text . "\e]8;;\e\\";
+    }
+
+    /**
      * Convenience aliases for common workflow log patterns.
      * These mirror the visual language of the Flux browser UI.
      */

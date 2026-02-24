@@ -229,6 +229,20 @@ jobs:
       - run: ./deploy.sh ${{ inputs.target }}
 ```
 
+### 3. CLI Ansi Helper
+Flux provides a helper to emit ANSI escape codes for formatting CLI output.
+
+```php
+use Entreya\Flux\Output\Ansi;
+
+// Colored text
+echo Ansi::green('Success!');
+echo Ansi::bold(Ansi::red('Error!'));
+
+// Clickable terminal links
+echo Ansi::link('https://entreya.com', 'Entreya Website');
+```
+
 ## Security
 
 ### Command Allowlist

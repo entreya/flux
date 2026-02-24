@@ -3,7 +3,7 @@
         'name' => 'entreya/flux',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'ec3cb6e08028c4278c7fb9318dab80f806653a85',
+        'reference' => '6740c40a0ea4a48c8a9cc00563592cb294c7b733',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -13,7 +13,7 @@
         'entreya/flux' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'ec3cb6e08028c4278c7fb9318dab80f806653a85',
+            'reference' => '6740c40a0ea4a48c8a9cc00563592cb294c7b733',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
