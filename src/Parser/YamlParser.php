@@ -9,11 +9,13 @@ use Entreya\Flux\Exceptions\ParseException;
 /**
  * YAML parser for Flux workflow files.
  *
- * Uses symfony/yaml when installed (recommended). Falls back to PHP's native
- * yaml_parse() extension if available. Throws ParseException otherwise.
+ * Only used when Flux::fromYaml() is called — Flux::pipeline() has no dependency
+ * on this class or any YAML library.
  *
- * Install symfony/yaml:
- *   composer require symfony/yaml
+ * Parser resolution order:
+ *   1. symfony/yaml  (optional, recommended) — composer require symfony/yaml
+ *   2. yaml_parse()  (PHP YAML extension)
+ *   3. ParseException if neither is available
  */
 class YamlParser
 {

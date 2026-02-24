@@ -12,17 +12,17 @@
 const FluxUI = (() => {
 
   // ── State ────────────────────────────────────────────────────────────────
-  let es = null;
-  let cfg = {};
-  let lineIdx = {};   // { "jobId-stepKey": lineNumber }
-  let stepFails = {};   // { "jobId-stepKey": true }
-  let jobTimers = {};   // { jobId: startMs }
-  let wfStart = null; // workflow start timestamp
-  let wfTimer = null; // setInterval handle for elapsed timer
-  let jobTotal = 0;    // total jobs expected
-  let jobsDone = 0;    // jobs completed (success or failure)
-  let showTs = false;// timestamp toggle state
-  let jobIds = {};   // { jobId: true } for maintaining order
+  let es         = null;
+  let cfg        = {};
+  let lineIdx    = {};   // { "jobId-stepKey": lineNumber }
+  let stepFails  = {};   // { "jobId-stepKey": true }
+  let jobTimers  = {};   // { jobId: startMs }
+  let wfStart    = null; // workflow start timestamp
+  let wfTimer    = null; // setInterval handle for elapsed timer
+  let jobTotal   = 0;    // total jobs expected
+  let jobsDone   = 0;    // jobs completed (success or failure)
+  let showTs     = false;// timestamp toggle state
+  let jobIds     = {};   // { jobId: true } for maintaining order
 
   // ── DOM ──────────────────────────────────────────────────────────────────
   const $ = id => document.getElementById(id);
@@ -36,11 +36,11 @@ const FluxUI = (() => {
 
   // Step status → Bootstrap Icon class + inner char
   const STEP_ICONS = {
-    pending: { cls: '', char: '' },
-    running: { cls: '', char: '↻' },
-    success: { cls: '', char: '✓' },
-    failure: { cls: '', char: '✕' },
-    skipped: { cls: '', char: '–' },
+    pending: { cls: '',         char: '' },
+    running: { cls: '',         char: '↻' },
+    success: { cls: '',         char: '✓' },
+    failure: { cls: '',         char: '✕' },
+    skipped: { cls: '',         char: '–' },
   };
 
   const JOB_ICON_CHARS = {
@@ -48,7 +48,7 @@ const FluxUI = (() => {
   };
 
   const PHASE_HTML = {
-    pre: '<span class="flux-phase-tag pre">pre</span>',
+    pre:  '<span class="flux-phase-tag pre">pre</span>',
     post: '<span class="flux-phase-tag post">post</span>',
     main: '',
   };
@@ -63,18 +63,18 @@ const FluxUI = (() => {
       try { fn(JSON.parse(e.data)); } catch (err) { console.warn('[Flux] bad JSON in', name, err); }
     });
 
-    on('workflow_start', onWorkflowStart);
-    on('job_start', onJobStart);
-    on('job_success', d => onJobDone(d, 'success'));
-    on('job_failure', d => onJobDone(d, 'failure'));
-    on('job_skipped', onJobSkipped);
-    on('step_start', onStepStart);
-    on('step_success', d => onStepDone(d, 'success'));
-    on('step_failure', d => onStepDone(d, 'failure'));
-    on('step_skipped', onStepSkipped);
-    on('log', onLog);
+    on('workflow_start',    onWorkflowStart);
+    on('job_start',         onJobStart);
+    on('job_success',       d => onJobDone(d, 'success'));
+    on('job_failure',       d => onJobDone(d, 'failure'));
+    on('job_skipped',       onJobSkipped);
+    on('step_start',        onStepStart);
+    on('step_success',      d => onStepDone(d, 'success'));
+    on('step_failure',      d => onStepDone(d, 'failure'));
+    on('step_skipped',      onStepSkipped);
+    on('log',               onLog);
     on('workflow_complete', () => onWorkflowEnd('success'));
-    on('workflow_failed', d => onWorkflowEnd('failure', d));
+    on('workflow_failed',   d  => onWorkflowEnd('failure', d));
 
     es.addEventListener('error', e => {
       if (!e.data) return;
@@ -84,7 +84,7 @@ const FluxUI = (() => {
         setBadge('failure');
         enableRerun();
         es.close();
-      } catch { }
+      } catch {}
     });
 
     es.addEventListener('stream_close', () => {
@@ -103,9 +103,9 @@ const FluxUI = (() => {
 
   // ── Workflow events ──────────────────────────────────────────────────────
   function onWorkflowStart(d) {
-    wfStart = Date.now();
-    jobTotal = d.job_count ?? 0;
-    jobsDone = 0;
+    wfStart   = Date.now();
+    jobTotal  = d.job_count ?? 0;
+    jobsDone  = 0;
 
     setBadge('running');
     setToolbarTitle(d.name, '');
@@ -300,8 +300,8 @@ const FluxUI = (() => {
 
     const details = el('details', 'flux-step', {
       id,
-      'data-job': jobId,
-      'data-step': stepKey,
+      'data-job':    jobId,
+      'data-step':   stepKey,
       'data-status': 'pending',
     });
     details.open = true;
@@ -344,7 +344,7 @@ const FluxUI = (() => {
 
     const key = `${jobId}-${stepKey}`;
     const num = (lineIdx[key] = (lineIdx[key] ?? 0) + 1);
-    const ts = new Date().toISOString().slice(11, 23);
+    const ts  = new Date().toISOString().slice(11, 23);
 
     const line = el('div', 'flux-log-line', { 'data-type': type });
     line.dataset.raw = content;
@@ -357,16 +357,10 @@ const FluxUI = (() => {
 
     container.appendChild(line);
 
-    // Debounce auto-scroll to avoid layout thrashing on rapid log bursts
-    if (!window._fxScrollRequested) {
-      window._fxScrollRequested = true;
-      requestAnimationFrame(() => {
-        window._fxScrollRequested = false;
-        const stepsEl = $('fx-steps');
-        if (stepsEl && (stepsEl.scrollHeight - stepsEl.scrollTop) < stepsEl.clientHeight + 200) {
-          stepsEl.scrollTop = stepsEl.scrollHeight;
-        }
-      });
+    // Auto-scroll if near bottom
+    const stepsEl = $('fx-steps');
+    if (stepsEl && (stepsEl.scrollHeight - stepsEl.scrollTop) < stepsEl.clientHeight + 200) {
+      stepsEl.scrollTop = stepsEl.scrollHeight;
     }
 
     const term = $('fx-search')?.value.trim();
@@ -398,7 +392,7 @@ const FluxUI = (() => {
     const bar = $('fx-progress');
     if (!bar) return;
     bar.style.width = '100%';
-    bar.classList.toggle('done', status === 'success');
+    bar.classList.toggle('done',   status === 'success');
     bar.classList.toggle('failed', status === 'failure');
   }
 
@@ -436,20 +430,20 @@ const FluxUI = (() => {
     try { match = new RegExp(term, 'i').test(text); }
     catch { match = text.toLowerCase().includes(term.toLowerCase()); }
     line.classList.toggle('is-hidden', !match);
-    line.classList.toggle('is-match', match);
+    line.classList.toggle('is-match',   match);
   }
 
   // ── Drop zone ─────────────────────────────────────────────────────────────
   function setupDropZone() {
-    const dz = $('fx-dropzone');
+    const dz    = $('fx-dropzone');
     const input = $('fx-file-input');
     if (!dz) return;
 
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev =>
+    ['dragenter','dragover','dragleave','drop'].forEach(ev =>
       document.body.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); }));
 
-    ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, () => dz.classList.add('is-over')));
-    ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, () => dz.classList.remove('is-over')));
+    ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, () => dz.classList.add('is-over')));
+    ['dragleave','drop'].forEach(ev  => dz.addEventListener(ev, () => dz.classList.remove('is-over')));
     dz.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
     input?.addEventListener('change', () => handleFiles(input.files));
     dz.addEventListener('click', () => input?.click());
@@ -491,12 +485,12 @@ const FluxUI = (() => {
   // ── Rerun ─────────────────────────────────────────────────────────────────
   function rerun() {
     if (!cfg.sseUrl) return;
-    lineIdx = {};
+    lineIdx   = {};
     stepFails = {};
     jobTimers = {};
-    jobTotal = 0;
-    jobsDone = 0;
-    wfStart = null;
+    jobTotal  = 0;
+    jobsDone  = 0;
+    wfStart   = null;
     clearInterval(wfTimer);
 
     const list = $('fx-job-list');
@@ -506,7 +500,7 @@ const FluxUI = (() => {
     if (steps) steps.innerHTML = '';
 
     const prog = $('fx-progress');
-    if (prog) { prog.style.width = '0%'; prog.classList.remove('done', 'failed'); }
+    if (prog) { prog.style.width = '0%'; prog.classList.remove('done','failed'); }
 
     setToolbarTitle('', 'Initializing…');
     setBadge('pending');
@@ -525,14 +519,14 @@ const FluxUI = (() => {
   // ── Theme ─────────────────────────────────────────────────────────────────
   function applyTheme(t) {
     document.documentElement.setAttribute('data-bs-theme', t);
-    try { localStorage.setItem('flux-theme', t); } catch { }
+    try { localStorage.setItem('flux-theme', t); } catch {}
     const icon = $('fx-theme-icon');
     if (icon) icon.className = 'bi ' + (t === 'dark' ? 'bi-sun' : 'bi-moon-stars');
   }
 
   function toggleTheme() {
     let cur = 'dark';
-    try { cur = localStorage.getItem('flux-theme') ?? 'dark'; } catch { }
+    try { cur = localStorage.getItem('flux-theme') ?? 'dark'; } catch {}
     applyTheme(cur === 'dark' ? 'light' : 'dark');
   }
 
@@ -546,7 +540,7 @@ const FluxUI = (() => {
   }
 
   // ── Expand / Collapse ─────────────────────────────────────────────────────
-  function expandAll() { document.querySelectorAll('.flux-step').forEach(s => s.open = true); }
+  function expandAll()   { document.querySelectorAll('.flux-step').forEach(s => s.open = true); }
   function collapseAll() { document.querySelectorAll('.flux-step').forEach(s => s.open = false); }
 
   // ── Scroll to job ─────────────────────────────────────────────────────────
@@ -587,7 +581,7 @@ const FluxUI = (() => {
   function init(config) {
     cfg = config ?? {};
     let theme = 'dark';
-    try { theme = localStorage.getItem('flux-theme') ?? 'dark'; } catch { }
+    try { theme = localStorage.getItem('flux-theme') ?? 'dark'; } catch {}
     applyTheme(theme);
     setupSearch();
     setupDropZone();

@@ -13,7 +13,15 @@
 composer require entreya/flux
 ```
 
-**Requires:** PHP 8.1+, `symfony/yaml`
+**Requires:** PHP 8.1+
+
+If you plan to use `Flux::fromYaml()`, also install a YAML parser. The recommended option is `symfony/yaml`, though the native PHP `yaml` extension works too:
+
+```bash
+composer require symfony/yaml
+```
+
+`Flux::pipeline()` (the fluent PHP API) has no YAML dependency at all.
 
 ---
 
