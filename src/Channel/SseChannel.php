@@ -34,6 +34,7 @@ class SseChannel
         header('X-Accel-Buffering: no');    // Nginx: disable proxy buffering
         header('Connection: keep-alive');
 
+        set_time_limit(0);
         // Some frameworks/hosts need this
         if (function_exists('apache_setenv')) {
             apache_setenv('no-gzip', '1');
