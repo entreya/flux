@@ -49,10 +49,41 @@ class AnsiConverter
             $text = preg_replace('/[^\r\n]*\r/', '', $text);
         }
 
-        // Escape HTML entities first (before we inject HTML spans)
+        // Extract OSC 8 links before htmlspecialchars modifies the escape codes
+        $links = [];
+        $text = preg_replace_callback(
+            '/\x1b\]8;;(.*?)\x1b\\\\(.*?)\x1b\]8;;\x1b\\\\/s',
+            function ($matches) use (&$links) {
+                $placeholder = "\x00LINK_" . count($links) . "\x00";
+                
+                $url  = htmlspecialchars($matches[1], ENT_QUOTES, 'UTF-8');
+                // The inner text might have CSI color codes, so we just preserve it for now
+                // but we HTML escape the plain text parts later.
+                // Wait, if we preserve it, htmlspecialchars will escape the CSI codes.
+                // It's safer to let htmlspecialchars run, THEN inject the <a> wrappers.
+                $links[$placeholder] = [
+                    'url'  => $url,
+                    'text' => $matches[2]
+                ];
+                
+                return $placeholder;
+            },
+            $text
+        );
+
+        // Escape standard HTML entities
         $text = htmlspecialchars($text, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-        // Match all ANSI escape sequences
+        // Restore links with proper <a> tags
+        if (!empty($links)) {
+            $text = strtr($text, array_map(function ($link) {
+                // Make sure we escape the inner text of the link too, but leave nested CSI codes alone
+                $inner = htmlspecialchars($link['text'], ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                return "<a href=\"{$link['url']}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"flux-ansi-link\">{$inner}</a>";
+            }, $links));
+        }
+
+        // Match all ANSI escape sequences (CSI)
         $pattern = '/\x1b\[([0-9;]*)([A-Za-z])/';
 
         $segments = preg_split($pattern, $text, -1, PREG_SPLIT_DELIM_CAPTURE);
