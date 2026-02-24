@@ -97,9 +97,15 @@ const FluxUI = (() => {
         es.close();
       }
       setTimeout(() => {
-        setBadge('failure');
-        enableRerun();
-      }, 1500);
+        onWorkflowEnd('failure');
+
+        // Find whichever job is currently 'running' and mark it failed
+        document.querySelectorAll('.fx-job-item[data-status="running"]').forEach(item => {
+          const jid = item.dataset.jobId;
+          onJobDone({ id: jid }, 'failure');
+          addAnnotation(jid, 'Connection was lost or timed out. Nginx/PHP killed the stream.');
+        });
+      }, 500);
     };
   }
 
