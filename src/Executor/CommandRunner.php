@@ -84,10 +84,10 @@ class CommandRunner
                         if ($chunk !== false && $chunk !== '') {
                             if ($type === 'stdout') {
                                 $stdoutBuf .= $chunk;
-                                yield from $this->drainLines($stdoutBuf, 'stdout');
+                                yield from $this->drainLines($stdoutBuf, 'stdout', true);
                             } else {
                                 $stderrBuf .= $chunk;
-                                yield from $this->drainLines($stderrBuf, 'stderr');
+                                yield from $this->drainLines($stderrBuf, 'stderr', true);
                             }
                         }
 
@@ -106,10 +106,10 @@ class CommandRunner
 
             // Flush any remaining partial lines
             if ($stdoutBuf !== '') {
-                yield ['type' => 'stdout', 'content' => $stdoutBuf];
+                yield from $this->drainLines($stdoutBuf, 'stdout', true);
             }
             if ($stderrBuf !== '') {
-                yield ['type' => 'stderr', 'content' => $stderrBuf];
+                yield from $this->drainLines($stderrBuf, 'stderr', true);
             }
 
             // Explicitly close pipes before proc_close
@@ -133,12 +133,20 @@ class CommandRunner
     }
 
     /**
-     * Extract complete lines from a growing buffer; leave partial last line.
+     * Extract complete lines from a growing buffer OR flush the entire buffer immediately.
      *
      * @return \Generator<array{type: string, content: string}>
      */
-    private function drainLines(string &$buffer, string $type): \Generator
+    private function drainLines(string &$buffer, string $type, bool $flushPartials = false): \Generator
     {
+        if ($flushPartials) {
+            if ($buffer !== '') {
+                yield ['type' => $type, 'content' => $buffer];
+                $buffer = '';
+            }
+            return;
+        }
+
         while (($pos = strpos($buffer, "\n")) !== false) {
             $line   = substr($buffer, 0, $pos);  // excludes the \n
             $buffer = substr($buffer, $pos + 1);
