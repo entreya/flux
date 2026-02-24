@@ -852,8 +852,6 @@ final readonly class Application
             ];
         }
 
-        if ($deprecationTriggers !== ['functions' => [], 'methods' => []]) {
-            ErrorHandler::instance()->useDeprecationTriggers($deprecationTriggers);
-        }
+        ErrorHandler::instance()->useDeprecationTriggers($deprecationTriggers);
     }
 }

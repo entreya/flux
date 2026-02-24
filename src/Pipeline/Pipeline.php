@@ -311,12 +311,5 @@ class Pipeline
     }
 
     public function getName(): string { return $this->name; }
-    public function getJobs(): array
-    {
-        $jobs = $this->jobs;
-        if ($this->activeJob !== null) {
-            $jobs[$this->activeJob->getId()] = $this->activeJob;
-        }
-        return $jobs;
-    }
+    public function getJobs(): array  { return $this->jobs;  }
 }

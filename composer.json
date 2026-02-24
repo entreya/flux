@@ -3,15 +3,7 @@
     "description": "Real-time workflow streaming library for PHP — GitHub Actions-style live console output in the browser.",
     "type": "library",
     "license": "MIT",
-    "keywords": [
-        "workflow",
-        "sse",
-        "streaming",
-        "console",
-        "yaml",
-        "ci",
-        "real-time"
-    ],
+    "keywords": ["workflow", "sse", "streaming", "console", "yaml", "ci", "real-time"],
     "homepage": "https://github.com/entreya/flux",
     "authors": [
         {
@@ -21,7 +13,11 @@
         }
     ],
     "require": {
-        "php": ">=8.1"
+        "php": ">=8.1",
+        "symfony/expression-language": "^7.4"
+    },
+    "suggest": {
+        "symfony/yaml": "Required to use Flux::fromYaml() — run: composer require symfony/yaml"
     },
     "require-dev": {
         "phpunit/phpunit": "^10.0 || ^11.0",
