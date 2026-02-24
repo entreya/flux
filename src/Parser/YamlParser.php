@@ -45,20 +45,7 @@ class YamlParser
      */
     public function parse(string $yaml): array
     {
-        // Prefer symfony/yaml — most robust
-        if (class_exists(\Symfony\Component\Yaml\Yaml::class)) {
-            try {
-                $result = \Symfony\Component\Yaml\Yaml::parse($yaml);
-                if (!is_array($result)) {
-                    throw new ParseException('Workflow YAML must be a mapping, not a scalar.');
-                }
-                return $result;
-            } catch (\Symfony\Component\Yaml\Exception\ParseException $e) {
-                throw new ParseException('YAML parse error: ' . $e->getMessage(), 0, $e);
-            }
-        }
-
-        // Fallback: PHP YAML extension
+        // Use PHP YAML extension
         if (function_exists('yaml_parse')) {
             $result = yaml_parse($yaml);
             if ($result === false) {
@@ -68,7 +55,7 @@ class YamlParser
         }
 
         throw new ParseException(
-            'No YAML parser available. Run: composer require symfony/yaml'
+            'No YAML parser available. Install PECL yaml extension.'
         );
     }
 }

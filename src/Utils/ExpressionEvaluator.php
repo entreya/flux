@@ -12,14 +12,6 @@ use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
  */
 class ExpressionEvaluator
 {
-    private ExpressionLanguage $expressionLanguage;
-
-    public function __construct()
-    {
-        $this->expressionLanguage = new ExpressionLanguage();
-        $this->registerFunctions();
-    }
-
     public function evaluate(string $expression, array $context = []): bool
     {
         // Strip ${{ }} wrapper if present (GitHub Actions style)
@@ -28,38 +20,14 @@ class ExpressionEvaluator
             $expression = trim(substr($expression, 3, -2));
         }
 
-        try {
-            return (bool) $this->expressionLanguage->evaluate($expression, $context);
-        } catch (\Throwable $e) {
-            // Treat evaluation errors as false (or throw? GitHub fails the workflow)
-            // For now, let's return false to skip safely, but maybe logging would be good.
-            return false;
-        }
-    }
+        $status = $context['status'] ?? 'success';
 
-    private function registerFunctions(): void
-    {
-        // success() - Returns true if the current step/job status is 'success'.
-        // Fix: previously relied on a positional $status argument that was never
-        // passed from the call site, so it always defaulted to 'success'. Now reads
-        // status from the $arguments context array passed to evaluate().
-        $this->expressionLanguage->register('success', fn() => '(status == "success")',
-            fn(array $arguments) => ($arguments['status'] ?? 'success') === 'success'
-        );
-
-        // failure() - Returns true if the current step/job status is 'failure'.
-        $this->expressionLanguage->register('failure', fn() => '(status == "failure")',
-            fn(array $arguments) => ($arguments['status'] ?? 'success') === 'failure'
-        );
-
-        // always() - Always runs regardless of prior status.
-        $this->expressionLanguage->register('always', fn() => 'true',
-            fn(array $arguments) => true
-        );
-
-        // cancelled() - Returns true if the workflow was cancelled.
-        $this->expressionLanguage->register('cancelled', fn() => '(status == "cancelled")',
-            fn(array $arguments) => ($arguments['status'] ?? 'success') === 'cancelled'
-        );
+        return match ($expression) {
+            'success()'   => $status === 'success',
+            'failure()'   => $status === 'failure',
+            'always()'    => true,
+            'cancelled()' => $status === 'cancelled',
+            default       => false, // Treats evaluation errors/unknowns as false
+        };
     }
 }
