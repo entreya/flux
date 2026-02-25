@@ -10,7 +10,7 @@ use Entreya\Flux\Output\AnsiConverter;
  * Writes workflow events directly to an SSE HTTP response.
  * Used for inline (real-time) streaming where the process is attached to the request.
  */
-class SseChannel
+class SseChannel implements ChannelInterface
 {
     private AnsiConverter $ansi;
 
@@ -67,7 +67,7 @@ class SseChannel
     /**
      * Send a terminal done event.
      */
-    public function close(): void
+    public function complete(): void
     {
         echo "event: stream_close\ndata: {}\n\n";
         flush();

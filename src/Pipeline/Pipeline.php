@@ -268,7 +268,7 @@ class Pipeline
             $channel->write($event);
         }
 
-        $channel->close();
+        $channel->complete();
     }
 
     public function writeToFile(string $path): void

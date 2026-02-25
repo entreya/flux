@@ -29,7 +29,7 @@ use Entreya\Flux\Output\AnsiConverter;
  * │  Flux::tail('/tmp/flux-jobs/abc123.log')->stream();           │
  * └───────────────────────────────────────────────────────────────┘
  */
-class FileChannel
+class FileChannel implements ChannelInterface
 {
     public const MODE_WRITE = 'write';
     public const MODE_TAIL  = 'tail';
