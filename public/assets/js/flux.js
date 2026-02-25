@@ -2,8 +2,11 @@
  * FluxUI — Real-time GitHub Actions-style workflow viewer
  * entreya/flux
  *
+ * Selector-agnostic: all element IDs are read from cfg.sel (set by PHP widgets).
+ * If cfg.sel is not provided, falls back to legacy fx-* IDs for backward compat.
+ *
  * Public API:
- *   FluxUI.init(config)    — boot: { sseUrl, uploadUrl }
+ *   FluxUI.init(config)    — boot: { sseUrl, uploadUrl, sel: {...} }
  *   FluxUI.rerun()         — reset UI and reconnect SSE
  *   FluxUI.toggleTheme()   — dark ↔ light
  *   FluxUI.expandAll()     — expand all step accordions
@@ -11,20 +14,36 @@
  */
 const FluxUI = (() => {
 
+  // ── Default selector map (backward compat with legacy index.php) ────────
+  const DEFAULTS = {
+    badge: 'fx-badge',
+    badgeText: 'fx-badge-text',
+    jobList: 'fx-job-list',
+    steps: 'fx-steps',
+    progress: 'fx-progress',
+    search: 'fx-search',
+    rerunBtn: 'fx-rerun-btn',
+    themeIcon: 'fx-theme-icon',
+    tsBtn: 'fx-ts-btn',
+    jobHeading: 'fx-job-heading',
+    dropzone: 'fx-dropzone',
+    fileInput: 'fx-file-input',
+  };
+
   // ── State ────────────────────────────────────────────────────────────────
   let es = null;
   let cfg = {};
-  let lineIdx = {};   // { "jobId-stepKey": lineNumber }
+  let sel = {};         // merged selector map
+  let lineIdx = {};     // { "jobId-stepKey": lineNumber }
   let stepFails = {};   // { "jobId-stepKey": true }
   let jobTimers = {};   // { jobId: startMs }
-  let wfStart = null; // workflow start timestamp
-  let wfTimer = null; // setInterval handle for elapsed timer
-  let jobTotal = 0;    // total jobs expected
-  let jobsDone = 0;    // jobs completed (success or failure)
-  let showTs = false;// timestamp toggle state
-  let jobIds = {};   // { jobId: true } for maintaining order
+  let wfStart = null;   // workflow start timestamp
+  let wfTimer = null;   // setInterval handle for elapsed timer
+  let jobTotal = 0;     // total jobs expected
+  let jobsDone = 0;     // jobs completed (success or failure)
+  let showTs = false;   // timestamp toggle state
 
-  // ── DOM ──────────────────────────────────────────────────────────────────
+  // ── DOM helpers ─────────────────────────────────────────────────────────
   const $ = id => document.getElementById(id);
 
   function el(tag, cls, attrs = {}) {
@@ -34,7 +53,16 @@ const FluxUI = (() => {
     return e;
   }
 
-  // Step status → Bootstrap Icon class + inner char
+  /**
+   * Build a dynamic ID for job/step sub-elements.
+   * Uses the steps container ID as the prefix so everything is namespace-scoped.
+   * e.g. if sel.steps = 'myLogs', then pfx('step', 'build', '0') → 'myLogs-step-build-0'
+   */
+  function pfx(...parts) {
+    return sel.steps + '-' + parts.join('-');
+  }
+
+  // Step status → inner char
   const STEP_ICONS = {
     pending: { cls: '', char: '' },
     running: { cls: '', char: '↻' },
@@ -48,8 +76,8 @@ const FluxUI = (() => {
   };
 
   const PHASE_HTML = {
-    pre: '<span class="flux-phase-tag pre">pre</span>',
-    post: '<span class="flux-phase-tag post">post</span>',
+    pre: '<span class="badge text-bg-warning me-1" style="font-size:9px">PRE</span>',
+    post: '<span class="badge text-bg-info me-1" style="font-size:9px">POST</span>',
     main: '',
   };
 
@@ -92,16 +120,11 @@ const FluxUI = (() => {
     });
 
     es.onerror = () => {
-      // Force close the default EventSource auto-reconnect behavior
-      if (es) {
-        es.close();
-      }
+      if (es) { es.close(); }
       setTimeout(() => {
         onWorkflowEnd('failure');
-
-        // Find whichever job is currently 'running' and mark it failed
-        document.querySelectorAll('.fx-job-item[data-status="running"]').forEach(item => {
-          const jid = item.dataset.jobId;
+        document.querySelectorAll('[data-flux-job][data-status="running"]').forEach(item => {
+          const jid = item.dataset.fluxJob;
           onJobDone({ id: jid }, 'failure');
           addAnnotation(jid, 'Connection was lost or timed out. Nginx/PHP killed the stream.');
         });
@@ -118,11 +141,10 @@ const FluxUI = (() => {
     setBadge('running');
     setToolbarTitle(d.name, '');
 
-    // Start the elapsed timer in the badge
     clearInterval(wfTimer);
     wfTimer = setInterval(() => {
-      const el = $('fx-badge-text');
-      if (el) el.textContent = 'Running · ' + formatDur((Date.now() - wfStart) / 1000);
+      const badge = $(sel.badgeText);
+      if (badge) badge.textContent = 'Running · ' + formatDur((Date.now() - wfStart) / 1000);
     }, 1000);
 
     updateProgress();
@@ -169,11 +191,11 @@ const FluxUI = (() => {
     setStepStatus(d.job, d.step, status, d.duration ?? null);
     if (status === 'failure') {
       stepFails[`${d.job}-${d.step}`] = true;
-      const s = $(`step-${d.job}-${d.step}`);
+      const s = $(pfx('step', d.job, d.step));
       if (s) s.open = true;
     } else {
       setTimeout(() => {
-        const s = $(`step-${d.job}-${d.step}`);
+        const s = $(pfx('step', d.job, d.step));
         if (s && !stepFails[`${d.job}-${d.step}`]) s.open = false;
       }, 800);
     }
@@ -193,13 +215,12 @@ const FluxUI = (() => {
     setBadge(status);
 
     const dur = wfStart ? formatDur((Date.now() - wfStart) / 1000) : '';
-    const badgeEl = $('fx-badge-text');
+    const badgeEl = $(sel.badgeText);
     if (badgeEl) badgeEl.textContent = (status === 'success' ? 'Completed' : 'Failed') + (dur ? ' · ' + dur : '');
 
-    // Mark remaining running jobs as success if workflow succeeded
     if (status === 'success') {
-      document.querySelectorAll('.fx-job-item[data-status="running"]').forEach(item => {
-        setSidebarJobStatus(item.dataset.jobId, 'success', '');
+      document.querySelectorAll('[data-flux-job][data-status="running"]').forEach(item => {
+        setSidebarJobStatus(item.dataset.fluxJob, 'success', '');
       });
     }
 
@@ -210,85 +231,88 @@ const FluxUI = (() => {
 
   // ── Sidebar ──────────────────────────────────────────────────────────────
   function upsertJobSidebarItem(id, name, status) {
-    const list = $('fx-job-list');
+    const list = $(sel.jobList);
     if (!list) return;
 
     const ph = list.querySelector('.flux-sidebar-empty');
     if (ph) ph.remove();
 
-    if ($(`job-item-${id}`)) return;
+    const itemId = pfx('job-item', id);
+    if ($(itemId)) return;
 
-    const item = el('div', 'fx-job-item', {
-      id: `job-item-${id}`,
-      'data-job-id': id,
+    const item = el('a', 'list-group-item list-group-item-action d-flex align-items-center gap-2 py-2', {
+      id: itemId,
+      href: '#',
+      'data-flux-job': id,
       'data-status': status,
     });
     item.innerHTML = `
-      <div class="fx-job-icon ${status === 'running' ? 'is-running' : ''}" id="job-icon-${id}">${JOB_ICON_CHARS[status] || ''}</div>
-      <div class="fx-job-label">
-        <span class="fx-job-name">${esc(name)}</span>
-        <span class="fx-job-meta" id="job-meta-${id}">…</span>
-      </div>
+      <span class="flux-job-icon is-${status}" id="${pfx('job-icon', id)}">${JOB_ICON_CHARS[status] || ''}</span>
+      <span class="flex-grow-1 text-truncate fw-medium small">${esc(name)}</span>
+      <small class="text-body-secondary font-monospace" id="${pfx('job-meta', id)}">…</small>
     `;
-    item.addEventListener('click', () => scrollToJob(id));
+    item.addEventListener('click', e => { e.preventDefault(); scrollToJob(id); });
     list.appendChild(item);
   }
 
   function setSidebarJobStatus(id, status, elapsed) {
-    const item = $(`job-item-${id}`);
+    const item = $(pfx('job-item', id));
     if (item) {
       item.dataset.status = status;
-      item.classList.toggle('is-active', false);
+      item.classList.remove('active');
     }
 
-    const icon = $(`job-icon-${id}`);
+    const icon = $(pfx('job-icon', id));
     if (icon) {
-      icon.className = `fx-job-icon is-${status}`;
+      icon.className = `flux-job-icon is-${status}`;
       icon.textContent = JOB_ICON_CHARS[status] || '';
     }
 
-    const meta = $(`job-meta-${id}`);
+    const meta = $(pfx('job-meta', id));
     if (meta && elapsed) meta.textContent = elapsed;
     else if (meta && status === 'skipped') meta.textContent = 'skipped';
   }
 
   // ── Job header in main area ──────────────────────────────────────────────
   function ensureJobHeader(id, name, preCount, stepCount, postCount) {
-    if ($(`job-header-${id}`)) return;
+    if ($(pfx('job-header', id))) return;
 
-    const steps = $('fx-steps');
+    const steps = $(sel.steps);
     if (!steps) return;
 
-    const group = el('div', '', { id: `job-group-${id}`, 'data-job-id': id });
+    const group = el('div', '', { id: pfx('job-group', id), 'data-flux-job': id });
 
     const total = preCount + stepCount + postCount;
     group.innerHTML = `
-      <div class="fx-job-header" id="job-header-${id}">
-        <i class="fx-job-header-icon bi bi-circle is-pending" id="jhdr-icon-${id}"></i>
-        <span class="fx-job-header-name">${esc(name)}</span>
-        <span class="fx-job-header-progress text-muted" id="jhdr-prog-${id}">0/${total} steps</span>
-        <span class="fx-job-header-dur" id="jhdr-dur-${id}"></span>
+      <div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom bg-body-tertiary sticky-top" id="${pfx('job-header', id)}">
+        <i class="bi bi-circle text-secondary" id="${pfx('jhdr-icon', id)}"></i>
+        <span class="fw-semibold small flex-grow-1">${esc(name)}</span>
+        <small class="text-body-secondary font-monospace" id="${pfx('jhdr-prog', id)}">0/${total} steps</small>
+        <small class="text-body-secondary font-monospace" id="${pfx('jhdr-dur', id)}"></small>
       </div>
-      <div class="fx-steps-pad" id="job-steps-${id}"></div>
+      <div class="px-2 py-1" id="${pfx('job-steps', id)}"></div>
     `;
     steps.appendChild(group);
   }
 
   function setJobHeaderStatus(id, status, elapsed) {
-    const icon = $(`jhdr-icon-${id}`);
+    const icon = $(pfx('jhdr-icon', id));
     if (icon) {
       const iconMap = { pending: 'bi-circle', running: 'bi-arrow-repeat', success: 'bi-check-circle-fill', failure: 'bi-x-circle-fill', skipped: 'bi-dash-circle' };
-      icon.className = `fx-job-header-icon bi ${iconMap[status] || 'bi-circle'} is-${status}`;
+      const colorMap = { pending: 'text-secondary', running: 'text-primary', success: 'text-success', failure: 'text-danger', skipped: 'text-secondary' };
+      icon.className = `bi ${iconMap[status] || 'bi-circle'} ${colorMap[status] || ''}`;
+      if (status === 'running') icon.style.animation = 'spin .9s linear infinite';
+      else icon.style.animation = '';
     }
 
     if (elapsed !== undefined) {
-      const dur = $(`jhdr-dur-${id}`);
+      const dur = $(pfx('jhdr-dur', id));
       if (dur) dur.textContent = elapsed;
     }
   }
 
   function bumpStepProgress(jobId) {
-    const prog = $(`jhdr-prog-${jobId}`);
+    const prog = $(pfx('jhdr-prog', jobId));
     if (!prog) return;
     const m = prog.textContent.match(/(\d+)\/(\d+)/);
     if (m) {
@@ -300,10 +324,10 @@ const FluxUI = (() => {
 
   // ── Steps ────────────────────────────────────────────────────────────────
   function upsertStep(jobId, stepKey, name, phase) {
-    const id = `step-${jobId}-${stepKey}`;
+    const id = pfx('step', jobId, stepKey);
     if ($(id)) return;
 
-    const container = $(`job-steps-${jobId}`);
+    const container = $(pfx('job-steps', jobId));
     if (!container) return;
 
     const details = el('details', 'flux-step', {
@@ -316,13 +340,13 @@ const FluxUI = (() => {
 
     details.innerHTML = `
       <summary class="flux-step-summary">
-        <div class="flux-step-ico is-pending" id="step-ico-${jobId}-${stepKey}"></div>
+        <div class="flux-step-ico is-pending" id="${pfx('step-ico', jobId, stepKey)}"></div>
         ${PHASE_HTML[phase] ?? ''}
         <span class="flux-step-name">${esc(name)}</span>
-        <span class="flux-step-dur" id="step-dur-${jobId}-${stepKey}"></span>
+        <span class="flux-step-dur" id="${pfx('step-dur', jobId, stepKey)}"></span>
         <i class="bi bi-chevron-right flux-step-chevron"></i>
       </summary>
-      <div class="flux-log-body" id="logs-${jobId}-${stepKey}"></div>
+      <div class="flux-log-body" id="${pfx('logs', jobId, stepKey)}"></div>
     `;
 
     container.appendChild(details);
@@ -330,24 +354,24 @@ const FluxUI = (() => {
   }
 
   function setStepStatus(jobId, stepKey, status, duration) {
-    const stepEl = $(`step-${jobId}-${stepKey}`);
+    const stepEl = $(pfx('step', jobId, stepKey));
     if (stepEl) stepEl.dataset.status = status;
 
-    const ico = $(`step-ico-${jobId}-${stepKey}`);
+    const ico = $(pfx('step-ico', jobId, stepKey));
     if (ico) {
       ico.className = `flux-step-ico is-${status}`;
       ico.textContent = STEP_ICONS[status]?.char || '';
     }
 
     if (duration != null) {
-      const dur = $(`step-dur-${jobId}-${stepKey}`);
+      const dur = $(pfx('step-dur', jobId, stepKey));
       if (dur) dur.textContent = duration + 's';
     }
   }
 
   // ── Log lines ─────────────────────────────────────────────────────────────
   function appendLog(jobId, stepKey, type, content) {
-    const container = $(`logs-${jobId}-${stepKey}`);
+    const container = $(pfx('logs', jobId, stepKey));
     if (!container) return;
 
     const key = `${jobId}-${stepKey}`;
@@ -366,53 +390,55 @@ const FluxUI = (() => {
     container.appendChild(line);
 
     // Auto-scroll if near bottom
-    const stepsEl = $('fx-steps');
+    const stepsEl = $(sel.steps);
     if (stepsEl && (stepsEl.scrollHeight - stepsEl.scrollTop) < stepsEl.clientHeight + 200) {
       stepsEl.scrollTop = stepsEl.scrollHeight;
     }
 
-    const term = $('fx-search')?.value.trim();
+    const term = $(sel.search)?.value.trim();
     if (term) filterLine(line, term);
   }
 
   // ── Failure annotation ────────────────────────────────────────────────────
   function addAnnotation(jobId, message) {
-    const container = $(`job-steps-${jobId}`);
+    const container = $(pfx('job-steps', jobId));
     if (!container) return;
 
-    const ann = el('div', 'flux-annotation err');
+    const ann = el('div', 'alert alert-danger d-flex align-items-start gap-2 py-2 px-3 small mt-1 mb-0');
     ann.innerHTML = `
-      <i class="bi bi-exclamation-circle ann-ico"></i>
-      <span class="ann-body">${esc(message)}</span>
+      <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+      <span class="font-monospace">${esc(message)}</span>
     `;
     container.appendChild(ann);
   }
 
   // ── Progress bar ──────────────────────────────────────────────────────────
   function updateProgress() {
-    const bar = $('fx-progress');
+    const bar = $(sel.progress);
     if (!bar) return;
     const pct = jobTotal > 0 ? (jobsDone / jobTotal) * 100 : 0;
     bar.style.width = pct + '%';
+    bar.setAttribute('aria-valuenow', Math.round(pct));
   }
 
   function setProgressDone(status) {
-    const bar = $('fx-progress');
+    const bar = $(sel.progress);
     if (!bar) return;
     bar.style.width = '100%';
-    bar.classList.toggle('done', status === 'success');
-    bar.classList.toggle('failed', status === 'failure');
+    bar.setAttribute('aria-valuenow', '100');
+    bar.classList.remove('bg-primary', 'bg-success', 'bg-danger');
+    bar.classList.add(status === 'success' ? 'bg-success' : 'bg-danger');
   }
 
   // ── Toolbar ───────────────────────────────────────────────────────────────
   function setToolbarTitle(jobId, jobName) {
-    const t = $('fx-job-heading');
+    const t = $(sel.jobHeading);
     if (t) t.textContent = jobName || jobId;
   }
 
   // ── Search ────────────────────────────────────────────────────────────────
   function setupSearch() {
-    const input = $('fx-search');
+    const input = $(sel.search);
     if (!input) return;
     let timer;
     input.addEventListener('input', () => {
@@ -443,8 +469,8 @@ const FluxUI = (() => {
 
   // ── Drop zone ─────────────────────────────────────────────────────────────
   function setupDropZone() {
-    const dz = $('fx-dropzone');
-    const input = $('fx-file-input');
+    const dz = $(sel.dropzone);
+    const input = $(sel.fileInput);
     if (!dz) return;
 
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev =>
@@ -465,10 +491,12 @@ const FluxUI = (() => {
   }
 
   function uploadFile(file) {
-    const dz = $('fx-dropzone');
+    const dz = $(sel.dropzone);
     if (dz) dz.innerHTML = `
-      <div class="flux-dz-icon"><i class="bi bi-arrow-repeat" style="animation:spin .9s linear infinite"></i></div>
-      <p class="flux-dz-sub">Uploading…</p>`;
+      <div class="text-center p-4">
+        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+        <p class="text-body-secondary small mt-2 mb-0">Uploading…</p>
+      </div>`;
     const fd = new FormData();
     fd.append('workflow_file', file);
     fetch(cfg.uploadUrl ?? 'upload.php', { method: 'POST', body: fd })
@@ -482,11 +510,11 @@ const FluxUI = (() => {
 
   // ── Status badge ──────────────────────────────────────────────────────────
   function setBadge(status) {
-    const badge = $('fx-badge');
+    const badge = $(sel.badge);
     if (!badge) return;
     badge.dataset.status = status;
     const labels = { pending: 'Connecting', running: 'Running', success: 'Completed', failure: 'Failed' };
-    const textEl = $('fx-badge-text');
+    const textEl = $(sel.badgeText);
     if (textEl) textEl.textContent = labels[status] ?? status;
   }
 
@@ -501,26 +529,26 @@ const FluxUI = (() => {
     wfStart = null;
     clearInterval(wfTimer);
 
-    const list = $('fx-job-list');
-    if (list) list.innerHTML = `<div class="flux-sidebar-empty">Waiting for workflow…</div>`;
+    const list = $(sel.jobList);
+    if (list) list.innerHTML = `<div class="flux-sidebar-empty text-body-secondary fst-italic small p-2">Waiting for workflow…</div>`;
 
-    const steps = $('fx-steps');
+    const steps = $(sel.steps);
     if (steps) steps.innerHTML = '';
 
-    const prog = $('fx-progress');
-    if (prog) { prog.style.width = '0%'; prog.classList.remove('done', 'failed'); }
+    const prog = $(sel.progress);
+    if (prog) { prog.style.width = '0%'; prog.classList.remove('bg-success', 'bg-danger'); prog.classList.add('bg-primary'); }
 
     setToolbarTitle('', 'Initializing…');
     setBadge('pending');
 
-    const btn = $('fx-rerun-btn');
+    const btn = $(sel.rerunBtn);
     if (btn) btn.disabled = true;
 
     connect(cfg.sseUrl);
   }
 
   function enableRerun() {
-    const btn = $('fx-rerun-btn');
+    const btn = $(sel.rerunBtn);
     if (btn) btn.disabled = false;
   }
 
@@ -528,7 +556,7 @@ const FluxUI = (() => {
   function applyTheme(t) {
     document.documentElement.setAttribute('data-bs-theme', t);
     try { localStorage.setItem('flux-theme', t); } catch { }
-    const icon = $('fx-theme-icon');
+    const icon = $(sel.themeIcon);
     if (icon) icon.className = 'bi ' + (t === 'dark' ? 'bi-sun' : 'bi-moon-stars');
   }
 
@@ -541,9 +569,9 @@ const FluxUI = (() => {
   // ── Timestamps toggle ─────────────────────────────────────────────────────
   function toggleTimestamps() {
     showTs = !showTs;
-    const stepsEl = $('fx-steps');
+    const stepsEl = $(sel.steps);
     if (stepsEl) stepsEl.classList.toggle('show-ts', showTs);
-    const btn = $('fx-ts-btn');
+    const btn = $(sel.tsBtn);
     if (btn) btn.classList.toggle('active', showTs);
   }
 
@@ -553,10 +581,10 @@ const FluxUI = (() => {
 
   // ── Scroll to job ─────────────────────────────────────────────────────────
   function scrollToJob(jobId) {
-    const group = $(`job-group-${jobId}`);
+    const group = $(pfx('job-group', jobId));
     if (group) group.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    document.querySelectorAll('.fx-job-item').forEach(i => i.classList.remove('is-active'));
-    $(`job-item-${jobId}`)?.classList.add('is-active');
+    document.querySelectorAll('[data-flux-job]').forEach(i => i.classList.remove('active'));
+    $(pfx('job-item', jobId))?.classList.add('active');
   }
 
   // ── Copy line ─────────────────────────────────────────────────────────────
@@ -588,6 +616,7 @@ const FluxUI = (() => {
   // ── Init ──────────────────────────────────────────────────────────────────
   function init(config) {
     cfg = config ?? {};
+    sel = { ...DEFAULTS, ...(cfg.sel ?? {}) };
     let theme = 'dark';
     try { theme = localStorage.getItem('flux-theme') ?? 'dark'; } catch { }
     applyTheme(theme);
