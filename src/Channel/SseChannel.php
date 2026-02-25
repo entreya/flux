@@ -12,7 +12,10 @@ use Entreya\Flux\Output\AnsiConverter;
  */
 class SseChannel implements ChannelInterface
 {
+    private const JSON_FLAGS = JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE;
+
     private AnsiConverter $ansi;
+    private bool $hasOutputBuffer = false;
 
     public function __construct()
     {
@@ -39,6 +42,10 @@ class SseChannel implements ChannelInterface
             apache_setenv('no-gzip', '1');
         }
         ini_set('zlib.output_compression', '0');
+
+        // Cache the ob check — after cleaning above this should be false,
+        // but frameworks may re-enable it.
+        $this->hasOutputBuffer = ob_get_level() > 0;
     }
 
     /**
@@ -54,11 +61,10 @@ class SseChannel implements ChannelInterface
             $data['content'] = $this->ansi->convert($data['content']);
         }
 
-        echo "event: $type\n";
-        echo "data: " . json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE) . "\n\n";
+        // Single echo + single flush (halves syscalls vs two separate echo calls)
+        echo "event: $type\ndata: " . json_encode($data, self::JSON_FLAGS) . "\n\n";
 
-        // Push to client immediately
-        if (ob_get_level() > 0) {
+        if ($this->hasOutputBuffer) {
             ob_flush();
         }
         flush();
@@ -78,8 +84,8 @@ class SseChannel implements ChannelInterface
      */
     public function error(string $message): void
     {
-        echo "event: error\n";
-        echo "data: " . json_encode(['message' => $message]) . "\n\n";
+        echo "event: error\ndata: " . json_encode(['message' => $message], self::JSON_FLAGS) . "\n\n";
         flush();
     }
 }
+

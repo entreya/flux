@@ -42,10 +42,14 @@ class RateLimiter
     {
         // Prefer APCu for atomic operations
         if (function_exists('apcu_inc')) {
-            if (!apcu_exists($key)) {
-                apcu_store($key, 0, ttl: 3600);
+            // Try atomic increment first — avoids TOCTOU race between exists() and store()
+            $val = apcu_inc($key);
+            if ($val === false) {
+                // Key doesn't exist yet — create with TTL and initial count of 1
+                apcu_store($key, 1, ttl: 3600);
+                return 1;
             }
-            return (int) apcu_inc($key);
+            return (int) $val;
         }
 
         return $this->fileIncrement($key);

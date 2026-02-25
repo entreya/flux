@@ -14,7 +14,7 @@ use Entreya\Flux\Flux;
 
 // ── Example 1: Simple inline stream (from SSE endpoint) ──────────────────────
 //
-// Flux::pipeline('Deploy to Production')
+// Flux::workflow('Deploy to Production')
 //     ->job('build', 'Build')
 //         ->step('Install deps', 'composer install --no-dev --optimize-autoloader')
 //         ->step('Run tests',    'vendor/bin/phpunit --testdox')
@@ -53,7 +53,7 @@ use Entreya\Flux\Flux;
 // $jobId   = uniqid('import-');
 // $logPath = '/var/log/flux-jobs/' . $jobId . '.log';
 //
-// Flux::pipeline('Import Orders')
+// Flux::workflow('Import Orders')
 //     ->job('process')
 //         ->step('Import CSV',    'php artisan orders:import /tmp/orders.csv')
 //         ->step('Send report',   'php artisan report:email')
@@ -73,7 +73,7 @@ use Entreya\Flux\Flux;
 
 // ── Example 6: Step with continue-on-error ───────────────────────────────────
 //
-// Flux::pipeline('Linting')
+// Flux::workflow('Linting')
 //     ->job('lint')
 //         ->step('PHP CS Fixer', 'vendor/bin/php-cs-fixer fix --dry-run')
 //         ->continueOnError()         // Don't stop if CS fixer finds issues
@@ -83,7 +83,7 @@ use Entreya\Flux\Flux;
 
 // ── Example 7: Per-step environment ──────────────────────────────────────────
 //
-// Flux::pipeline('Multi-env Deploy')
+// Flux::workflow('Multi-env Deploy')
 //     ->env(['DEPLOY_USER' => 'deployer'])   // Global
 //     ->job('staging', 'Deploy Staging')
 //         ->env(['APP_URL' => 'https://staging.example.com'])

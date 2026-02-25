@@ -91,6 +91,9 @@ abstract class FluxWidget
      */
     public function render(): string
     {
+        // Lazy CSS registration — only registers when widget is actually rendered
+        $this->registerStyleOnce();
+
         $sections = $this->renderSections();
         $content = $this->renderLayout($sections);
 
@@ -131,6 +134,16 @@ abstract class FluxWidget
     }
 
     /**
+     * Return component-specific CSS.
+     * Override in subclasses to provide widget styles.
+     * Return empty string if the widget has no custom CSS.
+     */
+    protected function styles(): string
+    {
+        return '';
+    }
+
+    /**
      * Return the selector key → element ID mappings this widget registers.
      *
      * @return array<string, string>
@@ -162,6 +175,19 @@ abstract class FluxWidget
             array_values($sections),
             $this->layout
         );
+    }
+
+    /**
+     * Register this widget class's CSS lazily (once per class, not per instance).
+     * Uses the short class name as the dedup key.
+     */
+    private function registerStyleOnce(): void
+    {
+        $key = static::class;
+        $css = $this->styles();
+        if ($css !== '') {
+            FluxAsset::registerCss($key, $css);
+        }
     }
 
     /**

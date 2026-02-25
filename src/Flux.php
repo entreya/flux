@@ -12,7 +12,7 @@ use Entreya\Flux\Parser\YamlParser;
  * Flux — Real-time workflow streaming library.
  *
  * Inline mode (process tied to HTTP request):
- *   Flux::pipeline('Deploy')->job('build')->step('Install', 'composer install')->stream();
+ *   Flux::workflow('Deploy')->job('build')->step('Install', 'composer install')->stream();
  *   Flux::fromYaml(__DIR__ . '/deploy.yaml')->stream();
  *
  * Background mode (process independent of HTTP request):
@@ -25,9 +25,9 @@ use Entreya\Flux\Parser\YamlParser;
 final class Flux
 {
     /**
-     * Start building a workflow pipeline with a fluent API.
+     * Start building a workflow with a fluent API.
      */
-    public static function pipeline(string $name = 'Workflow'): Pipeline
+    public static function workflow(string $name = 'Workflow'): Pipeline
     {
         return new Pipeline($name);
     }
@@ -58,3 +58,4 @@ final class Flux
         return new FileChannel($logPath, mode: FileChannel::MODE_TAIL);
     }
 }
+

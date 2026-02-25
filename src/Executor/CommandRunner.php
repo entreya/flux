@@ -66,8 +66,8 @@ class CommandRunner
                 $write  = null;
                 $except = null;
 
-                // Wait up to 100ms for data
-                $changed = stream_select($read, $write, $except, 0, 100_000);
+                // Wait up to 200ms for data (balance between responsiveness and CPU)
+                $changed = stream_select($read, $write, $except, 0, 200_000);
 
                 if ($changed === false) {
                     // Error or interruption
@@ -79,7 +79,7 @@ class CommandRunner
                         $type = ($stream === $pipes[1]) ? 'stdout' : 'stderr';
                         $id   = ($stream === $pipes[1]) ? 1 : 2;
 
-                        $chunk = fread($stream, 8192);
+                        $chunk = fread($stream, 65536);
 
                         if ($chunk !== false && $chunk !== '') {
                             if ($type === 'stdout') {

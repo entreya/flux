@@ -9,7 +9,7 @@ use Entreya\Flux\Exceptions\ParseException;
 /**
  * YAML parser for Flux workflow files.
  *
- * Only used when Flux::fromYaml() is called — Flux::pipeline() has no dependency
+ * Only used when Flux::fromYaml() is called — Flux::workflow() has no dependency
  * on this class or any YAML library.
  *
  * Parser resolution order:

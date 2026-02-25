@@ -26,6 +26,7 @@ use Entreya\Flux\Utils\ExpressionEvaluator;
 class WorkflowExecutor
 {
     private ExpressionEvaluator $evaluator;
+    private ?array $cachedBaseEnv = null;
 
     public function __construct(
         private readonly CommandRunner $runner,
@@ -254,20 +255,26 @@ class WorkflowExecutor
 
     private function event(string $type, array $data): array
     {
-        return ['event' => $type, 'data' => $data, 'ts' => time()];
+        return ['event' => $type, 'data' => $data, 'ts' => hrtime(true) / 1e9];
     }
 
     private function buildBaseEnv(): array
     {
+        if ($this->cachedBaseEnv !== null) {
+            return $this->cachedBaseEnv;
+        }
+
         $phpDir = dirname(PHP_BINARY);
         $path   = getenv('PATH') ?: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
-        return [
+        $this->cachedBaseEnv = [
             'PATH'                => $phpDir . PATH_SEPARATOR . $path,
             'PHP_BINARY'          => PHP_BINARY,
             'TERM'                => 'xterm-256color',
             'ANSIBLE_FORCE_COLOR' => '1',
             'FORCE_COLOR'         => '1',
         ];
+
+        return $this->cachedBaseEnv;
     }
 }

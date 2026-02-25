@@ -31,7 +31,7 @@ echo "Log path: $logPath\n\n";
 
 // Run the pipeline and write output to a file.
 // This call blocks until the pipeline finishes — perfect inside a queue worker.
-Flux::pipeline('Import Customer Data')
+Flux::workflow('Import Customer Data')
     ->job('validate', 'Validate CSV')
         ->step('Check file format', 'echo "Validating CSV headers..."')
         ->step('Check row count',   'echo "Found 12,450 rows. OK."')

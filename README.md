@@ -21,7 +21,7 @@ If you plan to use `Flux::fromYaml()`, also install a YAML parser. The recommend
 composer require symfony/yaml
 ```
 
-`Flux::pipeline()` (the fluent PHP API) has no YAML dependency at all.
+`Flux::workflow()` (the fluent PHP API) has no YAML dependency at all.
 
 ---
 
@@ -64,7 +64,7 @@ Flux::fromYaml(__DIR__ . '/../workflows/deploy.yaml')->stream();
 ### 2. Fluent PHP API
 
 ```php
-Flux::pipeline('Deploy')
+Flux::workflow('Deploy')
     ->job('build', 'Build')
         ->step('Install deps',  'composer install --no-dev')
         ->step('Run tests',     'vendor/bin/phpunit')
@@ -122,7 +122,7 @@ Browser opens SSE → tail the log → stream to browser
 $jobId   = $this->job->id; // From your queue system
 $logPath = storage_path('logs/flux/' . $jobId . '.log');
 
-Flux::pipeline('Import Customer Data')
+Flux::workflow('Import Customer Data')
     ->job('validate', 'Validate')
         ->step('Check format', 'php artisan import:validate --file=' . $this->file)
     ->job('process', 'Process')
@@ -552,7 +552,7 @@ Channels transport events from worker to browser. All implement `ChannelInterfac
 
 ```php
 // Worker
-Flux::pipeline('Import')->job('run')->step('Go', 'php import.php')->writeToFile('/tmp/flux/abc.log');
+Flux::workflow('Import')->job('run')->step('Go', 'php import.php')->writeToFile('/tmp/flux/abc.log');
 
 // SSE endpoint
 Flux::tail('/tmp/flux/abc.log')->stream();

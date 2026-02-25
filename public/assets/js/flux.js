@@ -106,16 +106,25 @@ const FluxUI = (() => {
     try { hooks[event]?.(...args); } catch (e) { console.warn('[Flux] hook error', event, e); }
   }
 
+  // ── Bootstrap collapse helper (BS4 jQuery + BS5 vanilla) ────────────────
+  function bsCollapse(el, action) {
+    if (!el) return;
+    // BS5: bootstrap.Collapse.getOrCreateInstance
+    if (typeof bootstrap !== 'undefined' && bootstrap.Collapse?.getOrCreateInstance) {
+      bootstrap.Collapse.getOrCreateInstance(el)[action]();
+      // BS4: jQuery $(el).collapse('show'|'hide')
+    } else if (typeof jQuery !== 'undefined') {
+      jQuery(el).collapse(action);
+    }
+  }
+
   // ── Step collapse helpers (details vs accordion) ────────────────────────
   function stepOpen(stepId) {
     const el = $(stepId);
     if (!el) return;
     if (collapseMethod === 'accordion') {
       const colId = stepId.replace(/-step-/, '-collapse-');
-      const colEl = $(colId);
-      if (colEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Collapse.getOrCreateInstance(colEl).show();
-      }
+      bsCollapse($(colId), 'show');
     } else {
       el.open = true;
     }
@@ -126,10 +135,7 @@ const FluxUI = (() => {
     if (!el) return;
     if (collapseMethod === 'accordion') {
       const colId = stepId.replace(/-step-/, '-collapse-');
-      const colEl = $(colId);
-      if (colEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Collapse.getOrCreateInstance(colEl).hide();
-      }
+      bsCollapse($(colId), 'hide');
     } else {
       el.open = false;
     }
@@ -519,9 +525,7 @@ const FluxUI = (() => {
       if (hits > 0) {
         if (collapseMethod === 'accordion') {
           const colEl = s.querySelector('.accordion-collapse');
-          if (colEl && typeof bootstrap !== 'undefined') {
-            bootstrap.Collapse.getOrCreateInstance(colEl).show();
-          }
+          bsCollapse(colEl, 'show');
         } else {
           s.open = true;
         }
@@ -651,9 +655,7 @@ const FluxUI = (() => {
   // ── Expand / Collapse ─────────────────────────────────────────────────────
   function expandAll() {
     if (collapseMethod === 'accordion') {
-      document.querySelectorAll('.accordion-collapse').forEach(c => {
-        if (typeof bootstrap !== 'undefined') bootstrap.Collapse.getOrCreateInstance(c).show();
-      });
+      document.querySelectorAll('.accordion-collapse').forEach(c => bsCollapse(c, 'show'));
     } else {
       document.querySelectorAll('.flux-step').forEach(s => s.open = true);
     }
@@ -661,9 +663,7 @@ const FluxUI = (() => {
 
   function collapseAll() {
     if (collapseMethod === 'accordion') {
-      document.querySelectorAll('.accordion-collapse').forEach(c => {
-        if (typeof bootstrap !== 'undefined') bootstrap.Collapse.getOrCreateInstance(c).hide();
-      });
+      document.querySelectorAll('.accordion-collapse').forEach(c => bsCollapse(c, 'hide'));
     } else {
       document.querySelectorAll('.flux-step').forEach(s => s.open = false);
     }

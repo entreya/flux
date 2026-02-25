@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Entreya\Flux\Pipeline;
 
+use Entreya\Flux\Channel\ChannelInterface;
 use Entreya\Flux\Channel\FileChannel;
 use Entreya\Flux\Channel\SseChannel;
 use Entreya\Flux\Executor\CommandRunner;
@@ -16,7 +17,7 @@ use Entreya\Flux\Security\RateLimiter;
 /**
  * Fluent pipeline builder.
  *
- *   Flux::pipeline('Deploy')
+ *   Flux::workflow('Deploy')
  *       ->job('build', 'Build')
  *           ->preStep('Validate env',   'php artisan env:check')
  *           ->step('Install',           'composer install --no-dev')
@@ -252,6 +253,18 @@ class Pipeline
 
     public function stream(): void
     {
+        $this->streamTo(new SseChannel());
+    }
+
+    /**
+     * Stream workflow execution through any channel implementation.
+     *
+     * Allows swapping SSE for Redis, Database, or custom channels:
+     *   Flux::workflow('Import')->job('load')->step('Parse', 'php parse.php')
+     *       ->streamTo(new RedisChannel($redis, $jobId));
+     */
+    public function streamTo(ChannelInterface $channel): void
+    {
         $this->commitActiveJob();
         $this->auth?->enforce();
         $this->rateLimiter?->check($_SERVER['REMOTE_ADDR'] ?? 'cli');
@@ -259,7 +272,6 @@ class Pipeline
         // Centralized: unlimited execution time for streaming workflows
         set_time_limit(0);
 
-        $channel  = new SseChannel();
         $executor = $this->buildExecutor();
 
         $channel->open();
