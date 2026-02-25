@@ -113,7 +113,6 @@ class FileChannel
         header('X-Accel-Buffering: no');
         header('Connection: keep-alive');
         ini_set('zlib.output_compression', '0');
-        set_time_limit(0);
 
         // Wait for the file to appear (job may start slightly after request)
         $waited = 0;

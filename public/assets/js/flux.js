@@ -2,11 +2,14 @@
  * FluxUI — Real-time GitHub Actions-style workflow viewer
  * entreya/flux
  *
- * Selector-agnostic: all element IDs are read from cfg.sel (set by PHP widgets).
- * If cfg.sel is not provided, falls back to legacy fx-* IDs for backward compat.
+ * Fully configurable via PHP widgets:
+ *   - Selectors:  cfg.sel.* — where to bind (element IDs)
+ *   - Templates:  cfg.templates.step — HTML template for step creation
+ *   - Plugins:    cfg.plugins.logPanel.* — behavior options
+ *   - Events:     cfg.events.* — custom JS event hooks
  *
  * Public API:
- *   FluxUI.init(config)    — boot: { sseUrl, uploadUrl, sel: {...} }
+ *   FluxUI.init(config)    — boot: { sseUrl, sel, templates, plugins, events }
  *   FluxUI.rerun()         — reset UI and reconnect SSE
  *   FluxUI.toggleTheme()   — dark ↔ light
  *   FluxUI.expandAll()     — expand all step accordions
@@ -15,7 +18,7 @@
 const FluxUI = (() => {
 
   // ── Default selector map (backward compat with legacy index.php) ────────
-  const DEFAULTS = {
+  const SEL_DEFAULTS = {
     badge: 'fx-badge',
     badgeText: 'fx-badge-text',
     jobList: 'fx-job-list',
@@ -30,18 +33,36 @@ const FluxUI = (() => {
     fileInput: 'fx-file-input',
   };
 
+  // ── Default step template (details/summary) ─────────────────────────────
+  const DEFAULT_STEP_TPL =
+    '<details class="flux-step" id="{id}" data-job="{job}" data-step="{step}" data-status="pending" open>'
+    + '<summary class="flux-step-summary">'
+    + '<div class="flux-step-ico is-pending" id="{icon_id}"></div>'
+    + '{phase}'
+    + '<span class="flux-step-name">{name}</span>'
+    + '<span class="flux-step-dur" id="{dur_id}"></span>'
+    + '<i class="bi bi-chevron-right flux-step-chevron"></i>'
+    + '</summary>'
+    + '<div class="flux-log-body" id="{logs_id}"></div>'
+    + '</details>';
+
   // ── State ────────────────────────────────────────────────────────────────
   let es = null;
   let cfg = {};
-  let sel = {};         // merged selector map
-  let lineIdx = {};     // { "jobId-stepKey": lineNumber }
-  let stepFails = {};   // { "jobId-stepKey": true }
-  let jobTimers = {};   // { jobId: startMs }
-  let wfStart = null;   // workflow start timestamp
-  let wfTimer = null;   // setInterval handle for elapsed timer
-  let jobTotal = 0;     // total jobs expected
-  let jobsDone = 0;     // jobs completed (success or failure)
-  let showTs = false;   // timestamp toggle state
+  let sel = {};               // merged selector map
+  let stepTpl = '';           // step HTML template
+  let collapseMethod = 'details'; // 'details' or 'accordion'
+  let hooks = {};             // custom event hooks
+  let lineIdx = {};           // { "jobId-stepKey": lineNumber }
+  let stepFails = {};         // { "jobId-stepKey": true }
+  let jobTimers = {};         // { jobId: startMs }
+  let wfStart = null;
+  let wfTimer = null;
+  let jobTotal = 0;
+  let jobsDone = 0;
+  let showTs = false;
+  let autoCollapse = true;
+  let autoScroll = true;
 
   // ── DOM helpers ─────────────────────────────────────────────────────────
   const $ = id => document.getElementById(id);
@@ -55,8 +76,7 @@ const FluxUI = (() => {
 
   /**
    * Build a dynamic ID for job/step sub-elements.
-   * Uses the steps container ID as the prefix so everything is namespace-scoped.
-   * e.g. if sel.steps = 'myLogs', then pfx('step', 'build', '0') → 'myLogs-step-build-0'
+   * Namespaced under sel.steps (e.g. 'myLogs-step-build-0')
    */
   function pfx(...parts) {
     return sel.steps + '-' + parts.join('-');
@@ -80,6 +100,40 @@ const FluxUI = (() => {
     post: '<span class="badge text-bg-info me-1" style="font-size:9px">POST</span>',
     main: '',
   };
+
+  // ── Event hook helper ───────────────────────────────────────────────────
+  function fire(event, ...args) {
+    try { hooks[event]?.(...args); } catch (e) { console.warn('[Flux] hook error', event, e); }
+  }
+
+  // ── Step collapse helpers (details vs accordion) ────────────────────────
+  function stepOpen(stepId) {
+    const el = $(stepId);
+    if (!el) return;
+    if (collapseMethod === 'accordion') {
+      const colId = stepId.replace(/-step-/, '-collapse-');
+      const colEl = $(colId);
+      if (colEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Collapse.getOrCreateInstance(colEl).show();
+      }
+    } else {
+      el.open = true;
+    }
+  }
+
+  function stepClose(stepId) {
+    const el = $(stepId);
+    if (!el) return;
+    if (collapseMethod === 'accordion') {
+      const colId = stepId.replace(/-step-/, '-collapse-');
+      const colEl = $(colId);
+      if (colEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Collapse.getOrCreateInstance(colEl).hide();
+      }
+    } else {
+      el.open = false;
+    }
+  }
 
   // ── SSE ──────────────────────────────────────────────────────────────────
   function connect(url) {
@@ -148,6 +202,7 @@ const FluxUI = (() => {
     }, 1000);
 
     updateProgress();
+    fire('workflow_start', d);
   }
 
   function onJobStart(d) {
@@ -156,6 +211,7 @@ const FluxUI = (() => {
     ensureJobHeader(d.id, d.name, d.pre_step_count, d.step_count, d.post_step_count);
     setJobHeaderStatus(d.id, 'running');
     setToolbarTitle(d.id, d.name);
+    fire('job_start', d);
   }
 
   function onJobDone(d, status) {
@@ -171,6 +227,7 @@ const FluxUI = (() => {
     if (status === 'failure' && d.name) {
       addAnnotation(d.id, `Job "${d.name}" failed`);
     }
+    fire('job_' + status, d);
   }
 
   function onJobSkipped(d) {
@@ -179,35 +236,39 @@ const FluxUI = (() => {
     setJobHeaderStatus(d.id, 'skipped', '');
     jobsDone++;
     updateProgress();
+    fire('job_skipped', d);
   }
 
   function onStepStart(d) {
     upsertStep(d.job, d.step, d.name, d.phase ?? 'main');
     setStepStatus(d.job, d.step, 'running');
     bumpStepProgress(d.job);
+    fire('step_start', d);
   }
 
   function onStepDone(d, status) {
     setStepStatus(d.job, d.step, status, d.duration ?? null);
+    const stepId = pfx('step', d.job, d.step);
     if (status === 'failure') {
       stepFails[`${d.job}-${d.step}`] = true;
-      const s = $(pfx('step', d.job, d.step));
-      if (s) s.open = true;
-    } else {
+      stepOpen(stepId);
+    } else if (autoCollapse) {
       setTimeout(() => {
-        const s = $(pfx('step', d.job, d.step));
-        if (s && !stepFails[`${d.job}-${d.step}`]) s.open = false;
+        if (!stepFails[`${d.job}-${d.step}`]) stepClose(stepId);
       }, 800);
     }
+    fire('step_' + status, d);
   }
 
   function onStepSkipped(d) {
     upsertStep(d.job, d.step, d.name ?? d.step, d.phase ?? 'main');
     setStepStatus(d.job, d.step, 'skipped');
+    fire('step_skipped', d);
   }
 
   function onLog(d) {
     appendLog(d.job, d.step, d.type, d.content);
+    fire('log', d);
   }
 
   function onWorkflowEnd(status, d) {
@@ -227,6 +288,7 @@ const FluxUI = (() => {
     setProgressDone(status);
     if (es) es.close();
     enableRerun();
+    fire('workflow_' + (status === 'success' ? 'complete' : 'failed'), d);
   }
 
   // ── Sidebar ──────────────────────────────────────────────────────────────
@@ -322,7 +384,7 @@ const FluxUI = (() => {
     }
   }
 
-  // ── Steps ────────────────────────────────────────────────────────────────
+  // ── Steps (template-driven) ─────────────────────────────────────────────
   function upsertStep(jobId, stepKey, name, phase) {
     const id = pfx('step', jobId, stepKey);
     if ($(id)) return;
@@ -330,27 +392,24 @@ const FluxUI = (() => {
     const container = $(pfx('job-steps', jobId));
     if (!container) return;
 
-    const details = el('details', 'flux-step', {
-      id,
-      'data-job': jobId,
-      'data-step': stepKey,
-      'data-status': 'pending',
-    });
-    details.open = true;
+    // Replace placeholders in the template from PHP
+    const html = stepTpl
+      .replace(/\{id\}/g, id)
+      .replace(/\{job\}/g, esc(jobId))
+      .replace(/\{step\}/g, esc(stepKey))
+      .replace(/\{icon_id\}/g, pfx('step-ico', jobId, stepKey))
+      .replace(/\{dur_id\}/g, pfx('step-dur', jobId, stepKey))
+      .replace(/\{logs_id\}/g, pfx('logs', jobId, stepKey))
+      .replace(/\{collapse_id\}/g, pfx('collapse', jobId, stepKey))
+      .replace(/\{name\}/g, esc(name))
+      .replace(/\{phase\}/g, PHASE_HTML[phase] ?? '')
+      .replace(/\{status\}/g, 'pending');
 
-    details.innerHTML = `
-      <summary class="flux-step-summary">
-        <div class="flux-step-ico is-pending" id="${pfx('step-ico', jobId, stepKey)}"></div>
-        ${PHASE_HTML[phase] ?? ''}
-        <span class="flux-step-name">${esc(name)}</span>
-        <span class="flux-step-dur" id="${pfx('step-dur', jobId, stepKey)}"></span>
-        <i class="bi bi-chevron-right flux-step-chevron"></i>
-      </summary>
-      <div class="flux-log-body" id="${pfx('logs', jobId, stepKey)}"></div>
-    `;
-
-    container.appendChild(details);
-    details.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    const stepEl = wrapper.firstElementChild;
+    container.appendChild(stepEl);
+    stepEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function setStepStatus(jobId, stepKey, status, duration) {
@@ -390,9 +449,11 @@ const FluxUI = (() => {
     container.appendChild(line);
 
     // Auto-scroll if near bottom
-    const stepsEl = $(sel.steps);
-    if (stepsEl && (stepsEl.scrollHeight - stepsEl.scrollTop) < stepsEl.clientHeight + 200) {
-      stepsEl.scrollTop = stepsEl.scrollHeight;
+    if (autoScroll) {
+      const stepsEl = $(sel.steps);
+      if (stepsEl && (stepsEl.scrollHeight - stepsEl.scrollTop) < stepsEl.clientHeight + 200) {
+        stepsEl.scrollTop = stepsEl.scrollHeight;
+      }
     }
 
     const term = $(sel.search)?.value.trim();
@@ -449,11 +510,22 @@ const FluxUI = (() => {
 
   function runSearch(term) {
     document.querySelectorAll('.flux-log-line').forEach(l => filterLine(l, term));
-    document.querySelectorAll('.flux-step').forEach(s => {
+    // Works for both <details> and .accordion-item step containers
+    const stepSelector = collapseMethod === 'accordion' ? '.accordion-item' : '.flux-step';
+    document.querySelectorAll(stepSelector).forEach(s => {
       if (!term) { s.style.display = ''; return; }
       const hits = s.querySelectorAll('.flux-log-line:not(.is-hidden)').length;
       s.style.display = hits > 0 ? '' : 'none';
-      if (hits > 0) s.open = true;
+      if (hits > 0) {
+        if (collapseMethod === 'accordion') {
+          const colEl = s.querySelector('.accordion-collapse');
+          if (colEl && typeof bootstrap !== 'undefined') {
+            bootstrap.Collapse.getOrCreateInstance(colEl).show();
+          }
+        } else {
+          s.open = true;
+        }
+      }
     });
   }
 
@@ -530,7 +602,7 @@ const FluxUI = (() => {
     clearInterval(wfTimer);
 
     const list = $(sel.jobList);
-    if (list) list.innerHTML = `<div class="flux-sidebar-empty text-body-secondary fst-italic small p-2">Waiting for workflow…</div>`;
+    if (list) list.innerHTML = '<div class="flux-sidebar-empty text-body-secondary fst-italic small p-2">Waiting for workflow…</div>';
 
     const steps = $(sel.steps);
     if (steps) steps.innerHTML = '';
@@ -545,6 +617,7 @@ const FluxUI = (() => {
     if (btn) btn.disabled = true;
 
     connect(cfg.sseUrl);
+    fire('rerun');
   }
 
   function enableRerun() {
@@ -576,8 +649,25 @@ const FluxUI = (() => {
   }
 
   // ── Expand / Collapse ─────────────────────────────────────────────────────
-  function expandAll() { document.querySelectorAll('.flux-step').forEach(s => s.open = true); }
-  function collapseAll() { document.querySelectorAll('.flux-step').forEach(s => s.open = false); }
+  function expandAll() {
+    if (collapseMethod === 'accordion') {
+      document.querySelectorAll('.accordion-collapse').forEach(c => {
+        if (typeof bootstrap !== 'undefined') bootstrap.Collapse.getOrCreateInstance(c).show();
+      });
+    } else {
+      document.querySelectorAll('.flux-step').forEach(s => s.open = true);
+    }
+  }
+
+  function collapseAll() {
+    if (collapseMethod === 'accordion') {
+      document.querySelectorAll('.accordion-collapse').forEach(c => {
+        if (typeof bootstrap !== 'undefined') bootstrap.Collapse.getOrCreateInstance(c).hide();
+      });
+    } else {
+      document.querySelectorAll('.flux-step').forEach(s => s.open = false);
+    }
+  }
 
   // ── Scroll to job ─────────────────────────────────────────────────────────
   function scrollToJob(jobId) {
@@ -616,12 +706,39 @@ const FluxUI = (() => {
   // ── Init ──────────────────────────────────────────────────────────────────
   function init(config) {
     cfg = config ?? {};
-    sel = { ...DEFAULTS, ...(cfg.sel ?? {}) };
+
+    // Merge selectors with defaults
+    sel = { ...SEL_DEFAULTS, ...(cfg.sel ?? {}) };
+
+    // Step template from PHP or default
+    stepTpl = cfg.templates?.step ?? DEFAULT_STEP_TPL;
+
+    // Plugin options
+    const lp = cfg.plugins?.logPanel ?? {};
+    collapseMethod = lp.collapseMethod ?? 'details';
+    autoCollapse = lp.autoCollapse !== false;
+    autoScroll = lp.autoScroll !== false;
+
+    // Event hooks
+    hooks = {};
+    if (cfg.events) {
+      for (const [event, handler] of Object.entries(cfg.events)) {
+        hooks[event] = typeof handler === 'function'
+          ? handler
+          : new Function('return (' + handler + ')')();
+      }
+    }
+
+    // Theme
     let theme = 'dark';
     try { theme = localStorage.getItem('flux-theme') ?? 'dark'; } catch { }
     applyTheme(theme);
+
+    // Wire up interactive elements
     setupSearch();
     setupDropZone();
+
+    // Connect SSE
     if (cfg.sseUrl) connect(cfg.sseUrl);
   }
 

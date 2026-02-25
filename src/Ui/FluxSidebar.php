@@ -7,28 +7,49 @@ namespace Entreya\Flux\Ui;
 /**
  * Sidebar widget — job list panel.
  *
- * Usage:
- *   echo FluxSidebar::widget(['id' => 'mySidebar']);
- *   echo FluxSidebar::widget(['id' => 'mySidebar', 'options' => ['style' => 'width:280px']]);
+ * Layout: {jobList}{footer}
+ *
+ * Options:
+ *   - options         (array)  — root <nav> HTML attributes
+ *   - listOptions     (array)  — job list container attributes
+ *   - footerOptions   (array)  — footer container attributes
+ *   - itemOptions     (array)  — default per-job-item attributes (applied via JS)
+ *   - workflowName    (string) — workflow name shown in footer
+ *   - trigger         (string) — trigger label (default: 'manual')
+ *   - showFooter      (bool)   — show the runner info footer (default: true)
+ *   - emptyText       (string) — placeholder text when no jobs
+ *   - layout          (string) — template: '{jobList}{footer}'
+ *   - beforeContent / afterContent
  */
 class FluxSidebar extends FluxWidget
 {
-    /** @var string Workflow name shown in footer */
+    protected array $listOptions   = [];
+    protected array $footerOptions = [];
+    protected array $itemOptions   = [];
     protected string $workflowName = '';
+    protected string $trigger      = 'manual';
+    protected bool $showFooter     = true;
+    protected string $emptyText    = 'Waiting for workflow…';
 
-    /** @var string Trigger label */
-    protected string $trigger = 'manual';
-
-    public function __construct(array $config = [])
+    protected function configure(array $config): void
     {
-        $this->workflowName = $config['workflowName'] ?? '';
-        $this->trigger = $config['trigger'] ?? 'manual';
-        parent::__construct($config);
+        $this->listOptions   = $config['listOptions'] ?? [];
+        $this->footerOptions = $config['footerOptions'] ?? [];
+        $this->itemOptions   = $config['itemOptions'] ?? [];
+        $this->workflowName  = $config['workflowName'] ?? '';
+        $this->trigger       = $config['trigger'] ?? 'manual';
+        $this->showFooter    = $config['showFooter'] ?? true;
+        $this->emptyText     = $config['emptyText'] ?? 'Waiting for workflow…';
     }
 
     protected function defaultId(): string
     {
         return 'fx-sidebar';
+    }
+
+    protected function defaultLayout(): string
+    {
+        return '{jobList}{footer}';
     }
 
     protected function selectorMap(): array
@@ -38,46 +59,74 @@ class FluxSidebar extends FluxWidget
         ];
     }
 
-    public function render(): string
+    protected function renderSections(): array
     {
-        $class = $this->mergeClass('d-flex flex-column border-end bg-body-tertiary');
+        return [
+            '{jobList}' => $this->renderJobList(),
+            '{footer}'  => $this->showFooter ? $this->renderFooter() : '',
+        ];
+    }
+
+    protected function renderJobList(): string
+    {
+        $opts = $this->listOptions;
+        $class = $this->mergeClass('list-group list-group-flush', $opts);
         $listId = htmlspecialchars($this->id . '-job-list', ENT_QUOTES);
-        $wfName = htmlspecialchars($this->workflowName, ENT_QUOTES);
+        $empty = htmlspecialchars($this->emptyText, ENT_QUOTES);
+
+        return '<div class="flex-grow-1 overflow-auto p-2">'
+             . '<p class="text-uppercase text-body-secondary fw-semibold small mb-2 px-1" style="font-size:11px;letter-spacing:.5px">Jobs</p>'
+             . '<div id="' . $listId . '" class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
+             . $this->renderAttributes($opts) . '>'
+             . '<div class="flux-sidebar-empty text-body-secondary fst-italic small p-2">' . $empty . '</div>'
+             . '</div>'
+             . '</div>';
+    }
+
+    protected function renderFooter(): string
+    {
+        $opts = $this->footerOptions;
+        $class = $this->mergeClass('border-top small p-2', $opts);
+        $wf = htmlspecialchars($this->workflowName, ENT_QUOTES);
         $trigger = htmlspecialchars($this->trigger, ENT_QUOTES);
 
-        $html = '<nav id="' . htmlspecialchars($this->id, ENT_QUOTES) . '" '
-              . 'class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-              . $this->renderAttributes() . '>';
+        $html = '<div class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
+              . $this->renderAttributes($opts) . '>';
 
-        // Scrollable job list
-        $html .= '<div class="flex-grow-1 overflow-auto p-2">';
-        $html .= '<p class="text-uppercase text-body-secondary fw-semibold small mb-2 px-1" style="font-size:11px;letter-spacing:.5px">Jobs</p>';
-        $html .= '<div id="' . $listId . '" class="list-group list-group-flush">';
-        $html .= '<div class="flux-sidebar-empty text-body-secondary fst-italic small p-2">Waiting for workflow…</div>';
-        $html .= '</div>';
-        $html .= '</div>';
-
-        // Footer
-        if ($wfName || $trigger) {
-            $html .= '<div class="border-top small p-2">';
-            if ($wfName) {
-                $html .= '<div class="d-flex justify-content-between px-1 py-1">';
-                $html .= '<span class="text-body-secondary">Workflow</span>';
-                $html .= '<span class="text-body-emphasis font-monospace text-truncate" style="max-width:140px">' . $wfName . '</span>';
-                $html .= '</div>';
-            }
-            $html .= '<div class="d-flex justify-content-between px-1 py-1">';
-            $html .= '<span class="text-body-secondary">Trigger</span>';
-            $html .= '<span class="text-body-emphasis font-monospace">' . $trigger . '</span>';
-            $html .= '</div>';
-            $html .= '<div class="d-flex justify-content-between px-1 py-1">';
-            $html .= '<span class="text-body-secondary">Runner</span>';
-            $html .= '<span class="text-body-emphasis font-monospace">php-' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '</span>';
-            $html .= '</div>';
-            $html .= '</div>';
+        if ($wf) {
+            $html .= '<div class="d-flex justify-content-between px-1 py-1">'
+                   . '<span class="text-body-secondary">Workflow</span>'
+                   . '<span class="text-body-emphasis font-monospace text-truncate" style="max-width:140px">' . $wf . '</span>'
+                   . '</div>';
         }
 
-        $html .= '</nav>';
+        $html .= '<div class="d-flex justify-content-between px-1 py-1">'
+               . '<span class="text-body-secondary">Trigger</span>'
+               . '<span class="text-body-emphasis font-monospace">' . $trigger . '</span>'
+               . '</div>';
+
+        $html .= '<div class="d-flex justify-content-between px-1 py-1">'
+               . '<span class="text-body-secondary">Runner</span>'
+               . '<span class="text-body-emphasis font-monospace">php-' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '</span>'
+               . '</div>';
+
+        $html .= '</div>';
         return $html;
+    }
+
+    public function render(): string
+    {
+        $opts = $this->options;
+        $class = $this->mergeClass('d-flex flex-column border-end bg-body-tertiary', $opts);
+
+        $inner = $this->beforeContent
+               . $this->renderLayout($this->renderSections())
+               . $this->afterContent;
+
+        return '<nav id="' . htmlspecialchars($this->id, ENT_QUOTES) . '" '
+             . 'class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
+             . $this->renderAttributes($opts) . '>'
+             . $inner
+             . '</nav>';
     }
 }

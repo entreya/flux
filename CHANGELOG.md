@@ -5,14 +5,18 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- `[FEAT]` Widget system: independent PHP component wrappers (`FluxBadge`, `FluxSidebar`, `FluxToolbar`, `FluxLogPanel`, `FluxProgress`) with configurable IDs and HTML attributes.
-- `[FEAT]` `FluxAsset` static accumulator for dynamic JS selector binding.
-- `[FEAT]` `FluxWidget` abstract base class with `::widget()` factory (Yii2-style API).
-- `[FEAT]` Added `Ansi::link()` method to render clickable links in supported terminals.
-- `[FEAT]` Added `Ansi` helper class in `src/Output/Ansi.php` for generating ANSI color codes to echo content with color.
-- `[FEAT]` Integrated `Ansi` helper into UI and parsing layers.
+- `[FEAT]` Kartik/GridView-style widget architecture with layout templates, named render methods, and per-sub-element options.
+- `[FEAT]` `StepRendererInterface` + `DetailsStepRenderer` + `AccordionStepRenderer` — swappable step markup (Column pattern).
+- `[FEAT]` `pluginOptions` and `pluginEvents` — JS behavior config and event hooks from PHP.
+- `[FEAT]` `beforeContent` / `afterContent` hooks on every widget.
+- `[FEAT]` Widget system: `FluxBadge`, `FluxSidebar`, `FluxToolbar`, `FluxLogPanel`, `FluxProgress`.
+- `[FEAT]` `FluxAsset` static accumulator: selectors, templates, pluginOptions, pluginEvents.
+- `[FEAT]` `FluxWidget` abstract base with `::widget()` factory, `renderSections()`, `configure()`.
+- `[FEAT]` Added `Ansi::link()` and `Ansi` helper class.
 
 ### Changed
-- `[REFACTOR]` `flux.js` is now fully selector-agnostic — reads IDs from `cfg.sel` map instead of hardcoded `fx-*` strings.
-- `[REFACTOR]` `flux.css` reduced from 507 → ~230 lines. Removed all layout/button/sidebar/toolbar classes; only log-specific and ANSI styles remain.
-- `[REFACTOR]` `index.php` rewritten to use widget system with Bootstrap 5 native components.
+- `[REFACTOR]` `flux.js`: template-driven step creation via `cfg.templates.step`, dual collapse (details/accordion), custom event hooks via `cfg.events`.
+- `[REFACTOR]` `flux.css` reduced from 507 → ~230 lines.
+- `[REFACTOR]` `index.php` rewritten using widget system.
+- `[REFACTOR]` Centralized `set_time_limit(0)` into `Pipeline::stream()` and `Pipeline::writeToFile()`, removed from channels.
+

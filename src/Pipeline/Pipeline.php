@@ -256,6 +256,9 @@ class Pipeline
         $this->auth?->enforce();
         $this->rateLimiter?->check($_SERVER['REMOTE_ADDR'] ?? 'cli');
 
+        // Centralized: unlimited execution time for streaming workflows
+        set_time_limit(0);
+
         $channel  = new SseChannel();
         $executor = $this->buildExecutor();
 
@@ -272,6 +275,9 @@ class Pipeline
     {
         $this->commitActiveJob();
         $this->rateLimiter?->check('background');
+
+        // Centralized: unlimited execution time for background jobs
+        set_time_limit(0);
 
         $channel  = new FileChannel($path, mode: FileChannel::MODE_WRITE);
         $executor = $this->buildExecutor();

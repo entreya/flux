@@ -5,24 +5,38 @@ declare(strict_types=1);
 namespace Entreya\Flux\Ui;
 
 /**
- * Static registry that accumulates widget selectors and renders the
- * final <script> tag that boots FluxUI with the correct selector map.
+ * Static registry that accumulates widget configuration and renders the
+ * final <script> tag that boots FluxUI with selectors, templates,
+ * plugin options, and event hooks.
  *
- * Usage:
- *   // Each widget auto-registers during render:
- *   FluxAsset::register('badge', 'myBadge');
- *   FluxAsset::register('steps', 'mySteps');
+ * Each widget auto-registers during its render() call.
+ * At the end of the page, call FluxAsset::init() to emit the <script>.
  *
- *   // At the end of the page:
- *   echo FluxAsset::init(['sseUrl' => '/sse.php?workflow=deploy']);
+ * Usage (in your view):
+ *   <?= FluxBadge::widget([...]) ?>
+ *   <?= FluxToolbar::widget([...]) ?>
+ *   <?= FluxLogPanel::widget([...]) ?>
+ *   ...
+ *   <?= FluxAsset::init(['sseUrl' => '/sse.php?workflow=deploy']) ?>
  */
 final class FluxAsset
 {
-    /** @var array<string, string> accumulated selector map */
+    /** @var array<string, string> element ID selectors */
     private static array $selectors = [];
+
+    /** @var array<string, array> namespaced plugin options */
+    private static array $pluginOptions = [];
+
+    /** @var array<string, string> JS event hooks: event name → JS function body */
+    private static array $pluginEvents = [];
+
+    /** @var array<string, string> JS template strings: key → HTML template */
+    private static array $templates = [];
 
     /** @var string base path to Flux public assets (CSS/JS) */
     private static string $assetPath = '';
+
+    // ── Registration API ────────────────────────────────────────────────────
 
     /**
      * Register a selector key → element ID mapping.
@@ -31,6 +45,39 @@ final class FluxAsset
     {
         self::$selectors[$key] = $id;
     }
+
+    /**
+     * Register plugin options under a namespace.
+     * e.g. registerPluginOptions('logPanel', ['useAccordion' => true])
+     */
+    public static function registerPluginOptions(string $namespace, array $options): void
+    {
+        self::$pluginOptions[$namespace] = array_merge(
+            self::$pluginOptions[$namespace] ?? [],
+            $options
+        );
+    }
+
+    /**
+     * Register a JS event hook.
+     * The handler should be a raw JS function body string.
+     * e.g. registerEvent('workflow_complete', 'function() { location.reload(); }')
+     */
+    public static function registerEvent(string $event, string $jsHandler): void
+    {
+        self::$pluginEvents[$event] = $jsHandler;
+    }
+
+    /**
+     * Register a JS HTML template string.
+     * e.g. registerTemplate('step', '<div class="accordion-item">...</div>')
+     */
+    public static function registerTemplate(string $key, string $htmlTemplate): void
+    {
+        self::$templates[$key] = $htmlTemplate;
+    }
+
+    // ── Asset Rendering ─────────────────────────────────────────────────────
 
     /**
      * Set the base path for Flux CSS/JS assets.
@@ -61,15 +108,40 @@ final class FluxAsset
 
     /**
      * Render the final <script> block that initializes FluxUI
-     * with the accumulated selector map and user-provided config.
+     * with all accumulated configuration.
      *
-     * @param array $config  Keys: sseUrl, uploadUrl, theme, ...
+     * @param array $config  Base config keys: sseUrl, uploadUrl, ...
      */
     public static function init(array $config = []): string
     {
+        // Merge selectors
         $config['sel'] = array_merge($config['sel'] ?? [], self::$selectors);
 
-        $json = json_encode($config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        // Merge plugin options
+        if (!empty(self::$pluginOptions)) {
+            $config['plugins'] = array_merge($config['plugins'] ?? [], self::$pluginOptions);
+        }
+
+        // Merge templates
+        if (!empty(self::$templates)) {
+            $config['templates'] = array_merge($config['templates'] ?? [], self::$templates);
+        }
+
+        // JSON-encode the safe parts (without event handlers)
+        $json = json_encode($config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        // Event handlers must be injected as raw JS (not JSON strings)
+        if (!empty(self::$pluginEvents)) {
+            $eventParts = [];
+            foreach (self::$pluginEvents as $event => $handler) {
+                $eventParts[] = '    ' . json_encode($event) . ': ' . $handler;
+            }
+            $eventsJs = "{\n" . implode(",\n", $eventParts) . "\n  }";
+
+            // Inject events object into the config JSON
+            // Remove the closing } and append events
+            $json = rtrim($json) . ",\n  \"events\": " . $eventsJs . "\n}";
+        }
 
         return "<script>FluxUI.init({$json});</script>";
     }
@@ -80,6 +152,9 @@ final class FluxAsset
     public static function reset(): void
     {
         self::$selectors = [];
+        self::$pluginOptions = [];
+        self::$pluginEvents = [];
+        self::$templates = [];
         self::$assetPath = '';
     }
 }
