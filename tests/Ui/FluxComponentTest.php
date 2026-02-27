@@ -258,7 +258,7 @@ class FluxComponentTest extends TestCase
         $this->assertStringContainsString('<script>', $output);
         $this->assertStringContainsString('FluxUI.init(', $output);
         $this->assertStringContainsString('sseUrl', $output);
-        $this->assertStringContainsString('selectors', $output);
+        $this->assertStringContainsString('"sel"', $output);
     }
 
     public function testRendererReset(): void

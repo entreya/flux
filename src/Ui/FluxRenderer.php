@@ -148,9 +148,9 @@ class FluxRenderer
     {
         $cfg = $initConfig;
 
-        // Merge selectors
+        // Merge selectors (flux.js reads cfg.sel)
         if (self::$selectors) {
-            $cfg['selectors'] = self::$selectors;
+            $cfg['sel'] = self::$selectors;
         }
 
         // Merge templates
@@ -158,9 +158,9 @@ class FluxRenderer
             $cfg['templates'] = self::$templates;
         }
 
-        // Merge plugin options
+        // Merge plugin options (flux.js reads cfg.plugins.*)
         if (self::$pluginOptions) {
-            $cfg = array_merge($cfg, self::$pluginOptions);
+            $cfg['plugins'] = self::$pluginOptions;
         }
 
         // Merge events
