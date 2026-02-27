@@ -1,358 +1,355 @@
-# Flux UI Widget API Reference
+# Flux UI Component API Reference
 
-Every widget supports three customization levels: **Options**, **Slots**, and **Closures**.
+Every component is a self-contained unit with **props**, **template**, **style**, **script**, and **slots**.
 
-| Level | What you control | How |
-|-------|-----------------|-----|
-| **Options** | CSS classes, attributes, text, visibility | `searchOptions => ['class' => '...']` |
-| **Slots** | One component's HTML | `slots => ['search' => fn(...)]` |
-| **Closure** | Full layout arrangement | `render([], fn($t) { ... })` |
+```
+Component::render([
+    'props'   => [...],   // override defaults
+    'slots'   => [...],   // override child components
+    'content' => ...,     // replace template entirely
+    'style'   => '...',   // add/replace CSS
+    'script'  => '...',   // add/replace JS
+])
+```
 
 ---
 
 ## Quick Examples
 
-### Options — Change styling
+### Override props
 ```php
-<?= FluxToolbar::widget([
-    'headingText'     => 'Grace Marks Evaluation',
-    'searchOptions'   => ['class' => 'border-primary bg-dark'],
-    'showRerun'       => false,
-    'options'         => ['class' => 'sticky-top shadow-sm'],
-]) ?>
-```
-
-### Slots — Swap one component
-```php
-<?= FluxToolbar::widget([
+<?= Toolbar::render([
+    'props' => ['class' => 'sticky-top shadow-sm'],
     'slots' => [
-        // Replace rerun button with a download link
-        'btnRerun' => fn($w, $props, $default) =>
-            '<a href="/report" class="btn btn-sm btn-primary">Download</a>',
-
-        // Wrap search with a glow effect
-        'search' => fn($w, $props, $default) =>
-            '<div class="glow">' . $default() . '</div>',
-
-        // Augment heading with a badge
-        'heading' => fn($w, $props, $default) =>
-            $default() . '<span class="badge text-bg-info ms-2">LIVE</span>',
+        'heading' => ['props' => ['text' => 'Grace Marks Evaluation']],
+        'search'  => ['props' => ['placeholder' => 'Filter grades…']],
     ],
 ]) ?>
 ```
 
-Every slot closure receives `($widget, $props, $default)`:
-- `$widget` — the widget instance
-- `$props` — resolved values (merged classes, computed IDs, text)
-- `$default` — call `$default()` to get the original HTML
-
-### Closure — Rearrange the layout
+### Replace a slot with raw HTML
 ```php
-<?= FluxToolbar::render(['id' => 'my-tb'], function (FluxToolbar $t) { ?>
-    <div class="row align-items-center">
-        <div class="col-4"><?= $t->heading() ?></div>
-        <div class="col-4"><?= $t->search() ?></div>
-        <div class="col-4 text-end">
-            <?= $t->btnTimestamps() ?>
-            <?= $t->btnExpand() ?>
-            <?= $t->btnCollapse() ?>
-            <?= $t->btnRerun() ?>
-            <?= $t->btnTheme() ?>
-        </div>
-    </div>
-<?php }) ?>
+<?= Toolbar::render([
+    'slots' => [
+        'btnRerun' => '<a href="/report" class="btn btn-sm btn-primary">Download</a>',
+    ],
+]) ?>
 ```
 
-> **Tip:** Inside a closure, use `$t->selector('search')` to get the JS-bound element ID if you want to write completely raw HTML while keeping JS bindings.
+### Disable a slot
+```php
+<?= Toolbar::render([
+    'slots' => [
+        'btnTheme' => false,    // Not rendered, no CSS/JS registered
+        'btnRerun' => false,
+    ],
+]) ?>
+```
+
+### Nest components inside a slot
+```php
+<?= Toolbar::render([
+    'slots' => [
+        'heading' => fn() =>
+            Badge::render(['props' => ['initialText' => 'LIVE']])
+            . Heading::render(['props' => ['text' => 'Grace Marks']]),
+    ],
+]) ?>
+```
+
+### Replace template entirely
+```php
+<?= Heading::render([
+    'content' => '<h1 id="{id}" class="display-6">{text}</h1>',
+]) ?>
+```
+
+### Add custom style and script
+```php
+<?= SearchInput::render([
+    'props'  => ['id' => 'my-search'],
+    'style'  => '.my-glow { box-shadow: 0 0 10px gold; }',
+    'script' => 'console.log("{id} is ready");',
+]) ?>
+```
 
 ---
 
-## FluxToolbar
+## Slot Override Types
 
-**Root tag:** `<div>` &nbsp;|&nbsp; **Default ID:** `fx-toolbar`
-
-### Config
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `headingOptions` | `array` | `[]` | Heading `<span>` attributes |
-| `searchOptions` | `array` | `[]` | Search `<input>` attributes |
-| `tsBtnOptions` | `array` | `[]` | Timestamp button attributes |
-| `expandBtnOptions` | `array` | `[]` | Expand-all button attributes |
-| `collapseBtnOptions` | `array` | `[]` | Collapse-all button attributes |
-| `rerunBtnOptions` | `array` | `[]` | Rerun button attributes |
-| `themeBtnOptions` | `array` | `[]` | Theme toggle button attributes |
-| `showRerun` | `bool` | `true` | Show rerun button |
-| `showThemeToggle` | `bool` | `true` | Show theme toggle |
-| `showSearch` | `bool` | `true` | Show search input |
-| `showTimestamps` | `bool` | `true` | Show timestamp toggle |
-| `showExpand` | `bool` | `true` | Show expand/collapse buttons |
-| `headingText` | `string` | `'Initializing…'` | Initial heading text |
-| `searchPlaceholder` | `string` | `'Search logs…'` | Search placeholder |
-| `afterSearch` | `string` | `''` | HTML after search input |
-
-### Slots
-
-| Slot | Props | Description |
-|------|-------|-------------|
-| `heading` | `id`, `class`, `text`, `attrs` | Job heading |
-| `search` | `id`, `class`, `placeholder`, `afterSearch`, `attrs` | Search input with icon |
-| `btnTimestamps` | `id`, `class`, `attrs` | Timestamp toggle |
-| `btnExpand` | `class`, `attrs` | Expand-all |
-| `btnCollapse` | `class`, `attrs` | Collapse-all |
-| `btnRerun` | `id`, `class`, `attrs` | Rerun button |
-| `btnTheme` | `iconId`, `class`, `attrs` | Theme toggle |
-| `controls` | `showSearch`, `showTimestamps`, `showExpand`, `showRerun`, `showThemeToggle` | All controls wrapper |
-
-### Closure Methods
-
-`$t->heading()` · `$t->search()` · `$t->btnTimestamps()` · `$t->btnExpand()` · `$t->btnCollapse()` · `$t->btnRerun()` · `$t->btnTheme()` · `$t->controls()`
-
-### Selectors
-
-`search` · `rerunBtn` · `themeIcon` · `tsBtn` · `jobHeading`
+| Value | Behavior |
+|-------|----------|
+| `string` | Raw HTML replaces the slot |
+| `array` | Config passed to the default component (`['props' => [...]]`) |
+| `Closure` | Called with parent props, returns HTML |
+| `false` | Not rendered — no HTML, no CSS, no JS registered |
+| `Foo::class` | Renders a different component class |
 
 ---
 
-## FluxBadge
+## Toolbar (`Entreya\Flux\Ui\Toolbar\Toolbar`)
 
-**Root tag:** `<span>` &nbsp;|&nbsp; **Default ID:** `fx-badge`
+**Root:** `<div>` &nbsp;|&nbsp; **Default ID:** `fx-toolbar`
 
-### Config
+### Props
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `dotOptions` | `array` | `[]` | Dot `<span>` attributes |
-| `textOptions` | `array` | `[]` | Text `<span>` attributes |
-| `initialText` | `string` | `'Connecting'` | Default text |
+| Prop | Default | Description |
+|------|---------|-------------|
+| `id` | `fx-toolbar` | Root element ID |
+| `class` | `d-flex align-items-center gap-2 px-3 py-2 border-bottom bg-body-tertiary` | Root CSS |
 
 ### Slots
 
-| Slot | Props | Description |
-|------|-------|-------------|
-| `dot` | `class`, `attrs` | Pulsing status dot |
-| `text` | `id`, `text`, `attrs` | Status text |
+| Slot | Component | Selectors |
+|------|-----------|-----------|
+| `heading` | `Heading` | `jobHeading` |
+| `search` | `SearchInput` | `search` |
+| `btnTimestamps` | `TimestampButton` | `tsBtn` |
+| `btnExpand` | `ExpandButton` | — |
+| `btnCollapse` | `CollapseButton` | — |
+| `btnRerun` | `RerunButton` | `rerunBtn` |
+| `btnTheme` | `ThemeButton` | `themeIcon` |
 
-### Closure Methods
+### Sub-Component Props
 
-`$b->dot()` · `$b->text()`
+**Heading** — `id`, `class`, `text` (default: `'Initializing…'`)
+**SearchInput** — `id`, `class`, `placeholder` (default: `'Search logs…'`)
+**RerunButton** — `id`, `class`
+**ThemeButton** — `id`, `class`, `icon_id`
+**TimestampButton** — `id`, `class`, `title`
+**ExpandButton** — `id`, `class`, `title`
+**CollapseButton** — `id`, `class`, `title`
 
-### Selectors
+---
 
-`badge` · `badgeText`
+## Badge (`Entreya\Flux\Ui\Badge`)
+
+**Root:** `<span>` &nbsp;|&nbsp; **Default ID:** `fx-badge`
+
+### Props
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `id` | `fx-badge` | Root element ID |
+| `class` | `badge rounded-pill text-bg-secondary...` | Root CSS |
+| `initialText` | `'Connecting'` | Default display text |
+
+### Slots
+
+| Slot | Component | Selectors |
+|------|-----------|-----------|
+| `dot` | `Badge\Dot` | — |
+| `text` | `Badge\Text` | `badge`, `badgeText` |
 
 ### Example
 
 ```php
-// Replace the pulsing dot with an icon
-<?= FluxBadge::widget([
-    'initialText' => 'Starting…',
+<?= Badge::render([
+    'props' => ['initialText' => 'Starting…'],
     'slots' => [
-        'dot' => fn($w, $p, $d) => '<i class="bi bi-circle-fill text-success me-1"></i>',
+        'dot' => '<i class="bi bi-circle-fill text-success me-1"></i>',
     ],
 ]) ?>
 ```
 
 ---
 
-## FluxSidebar
+## Sidebar (`Entreya\Flux\Ui\Sidebar\Sidebar`)
 
-**Root tag:** `<nav>` &nbsp;|&nbsp; **Default ID:** `fx-sidebar`
+**Root:** `<nav>` &nbsp;|&nbsp; **Default ID:** `fx-sidebar`
 
-### Config
+### Props
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `listOptions` | `array` | `[]` | Job list container attributes |
-| `footerOptions` | `array` | `[]` | Footer container attributes |
-| `itemOptions` | `array` | `[]` | Per-job-item attributes (JS) |
-| `workflowName` | `string` | `''` | Workflow name in footer |
-| `trigger` | `string` | `'manual'` | Trigger label |
-| `showFooter` | `bool` | `true` | Show runner info footer |
-| `emptyText` | `string` | `'Waiting for workflow…'` | Empty-state text |
+| Prop | Default | Description |
+|------|---------|-------------|
+| `id` | `fx-sidebar` | Root element ID |
+| `class` | `d-flex flex-column border-end bg-body-tertiary` | Root CSS |
+| `workflowName` | `''` | Passed to Footer |
+| `trigger` | `'manual'` | Passed to Footer |
 
 ### Slots
 
-| Slot | Props | Description |
-|------|-------|-------------|
-| `jobList` | `id`, `class`, `emptyText`, `attrs` | Job list container |
-| `footer` | `class`, `workflowName`, `trigger`, `phpVersion`, `attrs` | Runner metadata |
+| Slot | Component | Selectors |
+|------|-----------|-----------|
+| `jobList` | `Sidebar\JobList` | `jobList` |
+| `footer` | `Sidebar\Footer` | — |
 
-### Closure Methods
+### Sub-Component Props
 
-`$s->jobList()` · `$s->footer()`
-
-### Selectors
-
-`jobList`
+**JobList** — `id`, `class`, `emptyText` (default: `'Waiting for workflow…'`)
+**Footer** — `id`, `class`, `workflowName`, `trigger`, `phpVersion`
 
 ### Example
 
 ```php
-<?= FluxSidebar::render([
-    'workflowName' => 'Grace Marks',
-    'trigger'      => 'cron',
-], function (FluxSidebar $s) { ?>
-    <div class="card h-100 border-0">
-        <div class="card-body p-0"><?= $s->jobList() ?></div>
-        <div class="card-footer"><?= $s->footer() ?></div>
-    </div>
-<?php }) ?>
-```
-
----
-
-## FluxLogPanel
-
-**Root tag:** `<div>` &nbsp;|&nbsp; **Default ID:** `fx-steps`
-
-### Config
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `stepRenderer` | `string\|object` | `DetailsStepRenderer::class` | Step renderer class/instance |
-| `stepOptions` | `array` | `[]` | Step container attributes (JS) |
-| `stepHeaderOptions` | `array` | `[]` | Step header attributes (JS) |
-| `logBodyOptions` | `array` | `[]` | Log body attributes (JS) |
-| `beforeSteps` | `string` | `''` | HTML before steps |
-| `afterSteps` | `string` | `''` | HTML after steps |
-| `jobHeaderTemplate` | `string` | `''` | Custom job header HTML template |
-
-**Job header template tokens:** `{header_id}`, `{icon_id}`, `{prog_id}`, `{dur_id}`, `{name}`, `{job}`, `{total_steps}`
-
-### Slots
-
-| Slot | Props | Description |
-|------|-------|-------------|
-| `stepsContainer` | `id` | Container that JS fills with steps |
-
-### Closure Methods
-
-`$lp->stepsContainer()`
-
-### Selectors
-
-`steps`
-
-### Example
-
-```php
-<?= FluxLogPanel::widget([
-    'stepRenderer'      => AccordionStepRenderer::class,
-    'beforeSteps'       => '<div class="alert alert-info m-2">Processing…</div>',
-    'jobHeaderTemplate' => '<div id="{header_id}" class="bg-primary text-white px-3 py-2">'
-                         . '<span class="fw-semibold">{name}</span>'
-                         . '<small id="{prog_id}">0/{total_steps}</small>'
-                         . '</div>',
+<?= Sidebar::render([
+    'props' => ['workflowName' => 'grace-marks', 'trigger' => 'webhook'],
+    'slots' => ['footer' => false],  // hide footer
 ]) ?>
 ```
 
 ---
 
-## FluxProgress
+## LogPanel (`Entreya\Flux\Ui\Log\LogPanel`)
 
-**Root tag:** `<div>` &nbsp;|&nbsp; **Default ID:** `fx-progress`
+**Root:** `<div>` &nbsp;|&nbsp; **Default ID:** `fx-log-panel`
 
-### Config
+### Props
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `barOptions` | `array` | `[]` | Inner progress bar attributes |
-| `height` | `string` | `'2px'` | Bar height |
-| `barClass` | `string` | `'bg-primary'` | Bootstrap color class |
+| Prop | Default | Description |
+|------|---------|-------------|
+| `id` | `fx-log-panel` | Root element ID |
+| `class` | `flex-grow-1 overflow-auto` | Root CSS |
+| `stepRenderer` | `DetailsStepRenderer::class` | Step HTML renderer |
+| `jobHeaderTemplate` | `''` | Custom job header HTML (raw, not escaped) |
+| `beforeSteps` | `''` | Raw HTML before steps (not escaped) |
+| `afterSteps` | `''` | Raw HTML after steps (not escaped) |
 
 ### Slots
 
-| Slot | Props | Description |
-|------|-------|-------------|
-| `bar` | `id`, `class`, `attrs` | The progress bar div |
+| Slot | Component | Selectors |
+|------|-----------|-----------|
+| `stepsContainer` | `Log\StepsContainer` | `steps` |
 
-### Closure Methods
+### Job Header Template Tokens
 
-`$p->bar()`
-
-### Selectors
-
-`progress`
+`{header_id}` · `{icon_id}` · `{prog_id}` · `{dur_id}` · `{name}` · `{job}` · `{total_steps}`
 
 ### Example
 
 ```php
-<?= FluxProgress::widget([
-    'height'     => '6px',
-    'barClass'   => 'bg-success',
-    'barOptions' => ['class' => 'progress-bar-striped progress-bar-animated'],
+<?= LogPanel::render([
+    'props' => [
+        'stepRenderer' => AccordionStepRenderer::class,
+        'beforeSteps'  => '<div class="alert alert-info m-2">Processing…</div>',
+    ],
 ]) ?>
 ```
 
 ---
 
-## FluxAsset
+## Progress (`Entreya\Flux\Ui\Progress`)
 
-Static registry — not a widget. Accumulates config from all widgets and renders the JS bootstrap.
+**Root:** `<div>` &nbsp;|&nbsp; **Default ID:** `fx-progress`
+
+### Props
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `id` | `fx-progress` | Root element ID |
+| `class` | `progress` | Root CSS |
+| `height` | `'2px'` | Bar height |
+| `barClass` | `'progress-bar bg-primary'` | Progress bar CSS |
+
+### Slots
+
+| Slot | Component | Selectors |
+|------|-----------|-----------|
+| `bar` | `Progress\Bar` | `progress` |
+
+### Example
+
+```php
+<?= Progress::render([
+    'props' => ['height' => '6px', 'barClass' => 'progress-bar bg-success progress-bar-striped'],
+]) ?>
+```
+
+---
+
+## FluxRenderer
+
+Static asset collector. Not a component — accumulates CSS/JS from all rendered components.
 
 | Method | Description |
 |--------|-------------|
-| `FluxAsset::setAssetPath(string)` | Set base path for flux.css/js |
-| `FluxAsset::css()` | Render `<link>` for flux.css |
-| `FluxAsset::js()` | Render `<script>` for flux.js |
-| `FluxAsset::styles()` | Render `<style>` with all widget CSS |
-| `FluxAsset::init(array $config)` | Render `<script>` bootstrap with selectors, templates, events |
-| `FluxAsset::reset()` | Clear state (useful in tests) |
+| `FluxRenderer::setAssetPath(string)` | Base path for flux.css/js |
+| `FluxRenderer::css()` | `<link>` tag for flux.css |
+| `FluxRenderer::js()` | `<script>` tag for flux.js |
+| `FluxRenderer::styles()` | `<style>` block — all collected CSS |
+| `FluxRenderer::init(array)` | `<script>` — component JS + `FluxUI.init()` |
+| `FluxRenderer::flush(array)` | `styles()` + `js()` + `init()` in one call |
+| `FluxRenderer::reset()` | Clear state (tests) |
 
-### Complete Page
+**CSS** is deduped by component class (rendered once even with multiple instances).
+**JS** is per instance (each gets its own `{id}` interpolated).
+**If a component isn't rendered, its CSS/JS never appears.**
+
+---
+
+## Complete Page
 
 ```php
+<?php
+use Entreya\Flux\Ui\{Badge, Progress, FluxRenderer};
+use Entreya\Flux\Ui\Toolbar\Toolbar;
+use Entreya\Flux\Ui\Sidebar\Sidebar;
+use Entreya\Flux\Ui\Log\LogPanel;
+?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 <head>
-    <?= FluxAsset::css() ?>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <?= FluxRenderer::css() ?>
 </head>
 <body>
-    <?= FluxBadge::widget(['initialText' => 'Starting…']) ?>
-    <?= FluxToolbar::widget(['headingText' => 'Grade Pipeline']) ?>
-    <?= FluxProgress::widget(['height' => '3px']) ?>
+    <div class="d-flex flex-column vh-100">
+        <div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom">
+            <?= Badge::render(['props' => ['initialText' => 'Starting…']]) ?>
+        </div>
+        <?= Toolbar::render([
+            'slots' => [
+                'heading' => ['props' => ['text' => 'Grade Pipeline']],
+                'search'  => ['props' => ['placeholder' => 'Filter students…']],
+            ],
+        ]) ?>
+        <?= Progress::render(['props' => ['height' => '3px', 'barClass' => 'progress-bar bg-success']]) ?>
 
-    <div class="d-flex flex-grow-1 overflow-hidden">
-        <?= FluxSidebar::widget(['workflowName' => 'grace-marks']) ?>
-        <?= FluxLogPanel::widget() ?>
+        <div class="d-flex flex-grow-1 overflow-hidden">
+            <?= Sidebar::render(['props' => ['workflowName' => 'grace-marks']]) ?>
+            <?= LogPanel::render() ?>
+        </div>
     </div>
 
-    <?= FluxAsset::styles() ?>
-    <?= FluxAsset::js() ?>
-    <?= FluxAsset::init(['sseUrl' => '/sse.php?workflow=grace-marks']) ?>
+    <?= FluxRenderer::flush(['sseUrl' => '/sse.php?workflow=grace-marks']) ?>
 </body>
 </html>
 ```
 
 ---
 
-## Step Renderers
-
-| Renderer | HTML | Collapse Method |
-|----------|------|-----------------|
-| `DetailsStepRenderer` | `<details>/<summary>` | `details` |
-| `AccordionStepRenderer` | Bootstrap accordion | `accordion` |
-
-**Custom renderer:** Implement `StepRendererInterface` — define `jsTemplate(): string` and `collapseMethod(): string`.
+## Creating Custom Components
 
 ```php
-<?= FluxLogPanel::widget(['stepRenderer' => MyCustomRenderer::class]) ?>
+use Entreya\Flux\Ui\FluxComponent;
+
+class CustomAlert extends FluxComponent
+{
+    protected function defaults(): array
+    {
+        return ['id' => 'my-alert', 'class' => 'alert alert-info', 'message' => 'Hello'];
+    }
+
+    protected function template(): string
+    {
+        return '<div id="{id}" class="{class}">{message}</div>';
+    }
+
+    protected function style(): string
+    {
+        return '#my-alert { border-left: 4px solid #0dcaf0; }';
+    }
+
+    protected function script(): string
+    {
+        return 'document.getElementById("{id}").addEventListener("click", function() { this.remove(); });';
+    }
+}
+
+// Use it
+<?= CustomAlert::render(['props' => ['message' => 'Evaluation complete!']]) ?>
 ```
 
----
-
-## Universal Config
-
-Every widget accepts these:
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `id` | `string` | Root element ID |
-| `options` | `array` | Root element HTML attributes |
-| `layout` | `string` | Template with `{placeholders}` (ignored with closure) |
-| `pluginOptions` | `array` | JS config passed to `FluxUI.init()` |
-| `pluginEvents` | `array` | JS event hooks |
-| `beforeContent` | `string` | HTML before widget content |
-| `afterContent` | `string` | HTML after widget content |
-| `slots` | `array` | Per-component render closures |
+Style and script are automatically collected by `FluxRenderer` and output via `flush()`.

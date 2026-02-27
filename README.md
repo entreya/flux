@@ -293,84 +293,62 @@ Each component renders its own HTML and auto-registers its JS selectors with `Fl
 
 **Key design principles:**
 - Each widget is independently renderable — use any combination
-- Every sub-element has its own `*Options` array for HTML attribute control
-- Layout templates control which sections render and in what order
-- Named render methods can be overridden in subclasses
-- `beforeContent` / `afterContent` hooks inject arbitrary HTML
-- Step renderers are swappable (like GridView columns)
+- Every component owns its HTML, CSS, and JS
+- Slots allow replacing, disabling, or nesting child components
+- CSS is collected and deduped per component class
+- JS is bundled only for rendered components
+- Step renderers are swappable
 
 ### Minimal Example
 
 ```php
 <?php
-use Entreya\Flux\Ui\{FluxAsset, FluxBadge, FluxToolbar, FluxLogPanel, FluxProgress};
+use Entreya\Flux\Ui\{Badge, Progress, FluxRenderer};
+use Entreya\Flux\Ui\Toolbar\Toolbar;
+use Entreya\Flux\Ui\Log\LogPanel;
 ?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 <head>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <?= FluxAsset::css() ?>
+  <?= FluxRenderer::css() ?>
 </head>
 <body>
   <div class="d-flex flex-column vh-100">
-    <?= FluxBadge::widget() ?>
-    <?= FluxToolbar::widget() ?>
-    <?= FluxProgress::widget() ?>
-    <?= FluxLogPanel::widget() ?>
+    <?= Badge::render(['props' => ['initialText' => 'Starting…']]) ?>
+    <?= Toolbar::render() ?>
+    <?= Progress::render() ?>
+    <?= LogPanel::render() ?>
   </div>
 
-  <?= FluxAsset::js() ?>
-  <?= FluxAsset::init(['sseUrl' => 'sse.php?workflow=deploy']) ?>
+  <?= FluxRenderer::flush(['sseUrl' => 'sse.php?workflow=deploy']) ?>
 </body>
 </html>
 ```
 
-That's it — 5 lines of PHP render a full GitHub Actions-style viewer.
+### Slot Overrides
 
-### Component-wise Decomposition (Closure Pattern)
-If the fixed string placeholders (e.g., `'{heading}{controls}'`) are too rigid, you can fully decompose any widget using the `render()` Closures. The closure receives the widget instance, allowing you to manually place every atomic part of the UI exactly where you want it.
-
-```php
-<?= FluxToolbar::render(['id' => 'myToolbar'], function (FluxToolbar $t) { ?>
-    <div class="row align-items-center">
-        <!-- Render just the heading here -->
-        <div class="col-8">
-            <?= $t->heading() ?>
-        </div>
-        <!-- Render custom layout constraints with atomic buttons -->
-        <div class="col-4 d-flex justify-content-end gap-2">
-            <?= $t->search() ?>
-            <div class="btn-group">
-                <?= $t->btnExpand() ?>
-                <?= $t->btnCollapse() ?>
-            </div>
-            <?= $t->btnRerun() ?>
-        </div>
-    </div>
-<?php }) ?>
-```
-
-### Slot Overrides (Per-Component Customization)
-Override any single component's HTML without subclassing or rewriting the layout. Use the `slots` config key with closures that receive `($widget, $props, $default)`:
+Override any component's child slots without subclassing:
 
 ```php
-<?= FluxToolbar::widget([
+<?= Toolbar::render([
     'slots' => [
-        // Replace the rerun button with a download link
-        'btnRerun' => fn($w, $props, $default) =>
-            '<a href="/report" class="btn btn-sm btn-primary"><i class="bi bi-download"></i> Report</a>',
-        // Wrap search with a glow effect
-        'search' => fn($w, $props, $default) =>
-            '<div class="glow-wrapper">' . $default() . '</div>',
-        // Augment heading with a badge
-        'heading' => fn($w, $props, $default) =>
-            $default() . '<span class="badge text-bg-info ms-2">LIVE</span>',
+        // Override search placeholder
+        'search' => ['props' => ['placeholder' => 'Find grades…']],
+        // Replace rerun with a download link
+        'btnRerun' => '<a href="/report" class="btn btn-sm btn-primary">Report</a>',
+        // Disable theme toggle
+        'btnTheme' => false,
+        // Nest components inside heading
+        'heading' => fn() =>
+            Badge::render(['props' => ['initialText' => 'LIVE']])
+            . Heading::render(['props' => ['text' => 'Grace Marks']]),
     ],
 ]) ?>
 ```
 
-See [Closure API Documentation](docs/CLOSURE_API.md) for the complete 4-tier customization reference.
+See [Widget API Reference](docs/WIDGET_API.md) for the complete documentation.
 
 ---
 
