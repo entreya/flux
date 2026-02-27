@@ -5,17 +5,17 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- `[FEAT]` **Slot system:** Per-component render closures via `slots` config key. Override, wrap, or augment any widget sub-component without subclassing.
-- `[FEAT]` `FluxBadge` — public `dot()` and `text()` methods for closure pattern.
-- `[FEAT]` Comprehensive `FluxWidgetTest` — 37 test methods, 93 assertions.
-- `[DOCS]` `docs/WIDGET_API.md` — Complete API reference for every widget, config, slot, method, and selector.
+- `[FEAT]` **FluxComponent** — Vue-inspired base class with declarative props, template, style, script, and slots.
+- `[FEAT]` **FluxRenderer** — Static asset collector. CSS deduped per class, JS per instance. `flush()` bundles only rendered components.
+- `[FEAT]` 20 component files: Toolbar (8), Sidebar (3), Log (2), Badge (3), Progress (2), core (2).
+- `[FEAT]` 5 slot override types: string, array, Closure, false, class-string.
+- `[FEAT]` `rawProps()` — HTML-containing props skip escaping during interpolation.
+- `[FEAT]` `FluxComponentTest` — 35 tests covering props, slots, nesting, assets, dedup, all components.
 
 ### Changed
-- `[REFACTOR]` **Closure-first architecture:** All widgets use a single `render()` pipeline via `defaultClosure()`. Eliminated `renderLegacy()`.
-- `[REFACTOR]` `openTarget()`/`closeTarget()` — now pure tag open/close, no content injection.
-- `[FIX]` `FluxBadge` — added missing `openTarget()`/`closeTarget()`. Supports closure rendering.
-- `[REFACTOR]` `beforeContent`/`afterContent` — consistently in `defaultClosure()` only.
-- `[DOCS]` Removed `CLOSURE_API.md` and `specs/FLUX_LAYOUT_CLOSURE.md` — consolidated into `WIDGET_API.md`.
+- `[REFACTOR]` **Architecture rewrite v2** — replaced FluxWidget + FluxAsset with FluxComponent + FluxRenderer.
+- `[DELETE]` Removed: `FluxWidget.php`, `FluxToolbar.php`, `FluxBadge.php`, `FluxSidebar.php`, `FluxLogPanel.php`, `FluxProgress.php`, `FluxAsset.php`.
+- `[DOCS]` Consolidated all docs into `WIDGET_API.md`.
 
 ### Added
 - `[FEAT]` `ChannelInterface` — formal contract for all event transport channels.
