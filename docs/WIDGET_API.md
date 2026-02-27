@@ -200,15 +200,15 @@ Component::render([
 |------|---------|-------------|
 | `id` | `fx-log-panel` | Root element ID |
 | `class` | `flex-grow-1 overflow-auto` | Root CSS |
-| `jobHeaderTemplate` | `''` | Custom job header HTML (raw, not escaped) |
-| `beforeSteps` | `''` | Raw HTML before steps (not escaped) |
-| `afterSteps` | `''` | Raw HTML after steps (not escaped) |
+| `jobHeaderTemplate` | `''` | Custom job header HTML for JS |
 
 ### Slots
 
 | Slot | Component | Selectors |
 |------|-----------|-----------|
+| `beforeSteps` | `EmptySlot` | — |
 | `stepsContainer` | `Log\StepsContainer` | `steps` |
+| `afterSteps` | `EmptySlot` | — |
 
 ### Job Header Template Tokens
 
@@ -218,9 +218,9 @@ Component::render([
 
 ```php
 <?= LogPanel::render([
-    'props' => [
-        'stepRenderer' => AccordionStepRenderer::class,
-        'beforeSteps'  => '<div class="alert alert-info m-2">Processing…</div>',
+    'slots' => [
+        'beforeSteps' => '<div class="alert alert-info m-2">Processing…</div>',
+        'afterSteps'  => fn() => CustomFooter::render(),
     ],
 ]) ?>
 ```
