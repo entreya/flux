@@ -9,24 +9,26 @@ namespace Entreya\Flux\Ui;
  *
  * Layout: {heading}{controls}
  *
+ * Slots: heading, search, btnTimestamps, btnExpand, btnCollapse, btnRerun, btnTheme, controls
+ *
  * Options:
- *   - options          (array)  — root <div> attributes
- *   - headingOptions   (array)  — heading <span> attributes
- *   - searchOptions    (array)  — search <input> attributes
- *   - tsBtnOptions     (array)  — timestamp btn attributes
- *   - expandBtnOptions (array)  — expand all btn attributes
- *   - collapseBtnOptions (array) — collapse all btn attributes
- *   - rerunBtnOptions  (array)  — rerun btn attributes
- *   - themeBtnOptions  (array)  — theme toggle btn attributes
- *   - showRerun        (bool)   — show rerun button (default: true)
- *   - showThemeToggle  (bool)   — show theme toggle (default: true)
- *   - showSearch       (bool)   — show search input (default: true)
- *   - showTimestamps   (bool)   — show timestamps btn (default: true)
- *   - showExpand       (bool)   — show expand/collapse (default: true)
- *   - headingText      (string) — initial heading text
- *   - searchPlaceholder (string) — placeholder text
- *   - layout           (string) — template: '{heading}{controls}'
- *   - afterSearch      (string) — HTML injected after the search input
+ *   - options            (array)  — root <div> attributes
+ *   - headingOptions     (array)  — heading <span> attributes
+ *   - searchOptions      (array)  — search <input> attributes
+ *   - tsBtnOptions       (array)  — timestamp btn attributes
+ *   - expandBtnOptions   (array)  — expand all btn attributes
+ *   - collapseBtnOptions (array)  — collapse all btn attributes
+ *   - rerunBtnOptions    (array)  — rerun btn attributes
+ *   - themeBtnOptions    (array)  — theme toggle btn attributes
+ *   - showRerun          (bool)   — show rerun button (default: true)
+ *   - showThemeToggle    (bool)   — show theme toggle (default: true)
+ *   - showSearch         (bool)   — show search input (default: true)
+ *   - showTimestamps     (bool)   — show timestamps btn (default: true)
+ *   - showExpand         (bool)   — show expand/collapse (default: true)
+ *   - headingText        (string) — initial heading text
+ *   - searchPlaceholder  (string) — placeholder text
+ *   - afterSearch        (string) — HTML injected after the search input
+ *   - slots              (array)  — per-component render closures
  */
 class FluxToolbar extends FluxWidget
 {
@@ -94,128 +96,258 @@ class FluxToolbar extends FluxWidget
         ];
     }
 
-    // ── Named Render Methods (override any of these in subclass) ────────────
+    // ── Default Closure ─────────────────────────────────────────────────────
+
+    protected function defaultClosure(): \Closure
+    {
+        return function (self $w): void {
+            echo $w->beforeContent;
+            echo $w->heading();
+            echo $w->controls();
+            echo $w->afterContent;
+        };
+    }
+
+    // ── Pure Open/Close Tags ────────────────────────────────────────────────
+
+    protected function openTarget(): string
+    {
+        return $this->openTag('div', $this->id, 'd-flex align-items-center gap-2 px-3 py-2 border-bottom bg-body-tertiary', $this->options);
+    }
+
+    protected function closeTarget(): string
+    {
+        return '</div>';
+    }
+
+    // ── Public Closure API ───────────────────────────────────────────────
+
+    public function heading(): string
+    {
+        return $this->renderHeading();
+    }
+
+    public function search(): string
+    {
+        return $this->renderSearch();
+    }
+
+    public function btnTimestamps(): string
+    {
+        return $this->renderTsBtn();
+    }
+
+    public function btnExpand(): string
+    {
+        return $this->renderExpandBtn();
+    }
+
+    public function btnCollapse(): string
+    {
+        return $this->renderCollapseBtn();
+    }
+
+    public function btnRerun(): string
+    {
+        return $this->renderRerunBtn();
+    }
+
+    public function btnTheme(): string
+    {
+        return $this->renderThemeBtn();
+    }
+
+    public function controls(): string
+    {
+        return $this->renderControls();
+    }
+
+    // ── Internal Render Methods (with Slot Dispatch) ────────────────────────
 
     protected function renderHeading(): string
     {
-        $opts = $this->headingOptions;
+        $opts  = $this->headingOptions;
         $class = $this->mergeClass('fw-semibold small flex-grow-1 text-truncate', $opts);
-        $hId = htmlspecialchars($this->id . '-heading', ENT_QUOTES);
-        return '<span class="' . htmlspecialchars($class, ENT_QUOTES) . '" id="' . $hId . '"'
-             . $this->renderAttributes($opts) . '>'
-             . htmlspecialchars($this->headingText, ENT_QUOTES)
-             . '</span>';
+        $hId   = $this->id . '-heading';
+
+        $props = [
+            'id'    => $hId,
+            'class' => $class,
+            'text'  => $this->headingText,
+            'attrs' => $opts,
+        ];
+
+        return $this->slot('heading', $props, function () use ($props) {
+            return '<span class="' . htmlspecialchars($props['class'], ENT_QUOTES) . '"'
+                 . ' id="' . htmlspecialchars($props['id'], ENT_QUOTES) . '"'
+                 . $this->renderAttributes($props['attrs']) . '>'
+                 . htmlspecialchars($props['text'], ENT_QUOTES)
+                 . '</span>';
+        });
     }
 
     protected function renderControls(): string
     {
-        $html = '<div class="d-flex align-items-center gap-1 flex-shrink-0">';
+        $props = [
+            'showSearch'      => $this->showSearch,
+            'showTimestamps'  => $this->showTimestamps,
+            'showExpand'      => $this->showExpand,
+            'showRerun'       => $this->showRerun,
+            'showThemeToggle' => $this->showThemeToggle,
+        ];
 
-        if ($this->showSearch)     $html .= $this->renderSearch();
-        if ($this->showTimestamps) $html .= $this->renderTsBtn();
-        if ($this->showExpand)     $html .= $this->renderExpandBtn() . $this->renderCollapseBtn();
-        if ($this->showRerun)      $html .= $this->renderRerunBtn();
-        if ($this->showThemeToggle) $html .= $this->renderThemeBtn();
+        return $this->slot('controls', $props, function () {
+            $html = '<div class="d-flex align-items-center gap-1 flex-shrink-0">';
 
-        $html .= '</div>';
-        return $html;
+            if ($this->showSearch)      $html .= $this->renderSearch();
+            if ($this->showTimestamps)  $html .= $this->renderTsBtn();
+            if ($this->showExpand)      $html .= $this->renderExpandBtn() . $this->renderCollapseBtn();
+            if ($this->showRerun)       $html .= $this->renderRerunBtn();
+            if ($this->showThemeToggle) $html .= $this->renderThemeBtn();
+
+            $html .= '</div>';
+            return $html;
+        });
     }
 
     protected function renderSearch(): string
     {
-        $opts = $this->searchOptions;
+        $opts  = $this->searchOptions;
         $class = $this->mergeClass('form-control form-control-sm font-monospace', $opts);
-        $sId = htmlspecialchars($this->id . '-search', ENT_QUOTES);
-        $placeholder = htmlspecialchars($this->searchPlaceholder, ENT_QUOTES);
+        $sId   = $this->id . '-search';
 
-        // Remove placeholder from opts if it was passed — we handle it explicitly
+        // Remove placeholder from opts — we handle it explicitly
         unset($opts['placeholder']);
 
-        $html = '<div class="position-relative">'
-              . '<i class="bi bi-search position-absolute top-50 translate-middle-y text-body-secondary" style="left:8px;font-size:11px;pointer-events:none"></i>'
-              . '<input id="' . $sId . '" type="search"'
-              . ' class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-              . ' style="width:180px;padding-left:26px;font-size:12px"'
-              . ' placeholder="' . $placeholder . '"'
-              . ' autocomplete="off"'
-              . $this->renderAttributes($opts) . '>'
-              . '</div>';
+        $props = [
+            'id'          => $sId,
+            'class'       => $class,
+            'placeholder' => $this->searchPlaceholder,
+            'afterSearch' => $this->afterSearch,
+            'attrs'       => $opts,
+        ];
 
-        if ($this->afterSearch) {
-            $html .= $this->afterSearch;
-        }
+        return $this->slot('search', $props, function () use ($props) {
+            $sId   = htmlspecialchars($props['id'], ENT_QUOTES);
+            $class = htmlspecialchars($props['class'], ENT_QUOTES);
+            $ph    = htmlspecialchars($props['placeholder'], ENT_QUOTES);
 
-        return $html;
+            $html = '<div class="position-relative">'
+                  . '<i class="bi bi-search position-absolute top-50 translate-middle-y text-body-secondary" style="left:8px;font-size:11px;pointer-events:none"></i>'
+                  . '<input id="' . $sId . '" type="search"'
+                  . ' class="' . $class . '"'
+                  . ' style="width:180px;padding-left:26px;font-size:12px"'
+                  . ' placeholder="' . $ph . '"'
+                  . ' autocomplete="off"'
+                  . $this->renderAttributes($props['attrs']) . '>'
+                  . '</div>';
+
+            if ($props['afterSearch']) {
+                $html .= $props['afterSearch'];
+            }
+
+            return $html;
+        });
     }
 
     protected function renderTsBtn(): string
     {
-        $opts = $this->tsBtnOptions;
+        $opts  = $this->tsBtnOptions;
         $class = $this->mergeClass('btn btn-outline-secondary btn-sm', $opts);
-        return '<button class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . ' id="' . htmlspecialchars($this->id . '-ts-btn', ENT_QUOTES) . '"'
-             . ' onclick="FluxUI.toggleTimestamps()" title="Toggle timestamps"'
-             . $this->renderAttributes($opts) . '>'
-             . '<i class="bi bi-clock"></i></button>';
+        $btnId = $this->id . '-ts-btn';
+
+        $props = [
+            'id'    => $btnId,
+            'class' => $class,
+            'attrs' => $opts,
+        ];
+
+        return $this->slot('btnTimestamps', $props, function () use ($props) {
+            return '<button class="' . htmlspecialchars($props['class'], ENT_QUOTES) . '"'
+                 . ' id="' . htmlspecialchars($props['id'], ENT_QUOTES) . '"'
+                 . ' onclick="FluxUI.toggleTimestamps()" title="Toggle timestamps"'
+                 . $this->renderAttributes($props['attrs']) . '>'
+                 . '<i class="bi bi-clock"></i></button>';
+        });
     }
 
     protected function renderExpandBtn(): string
     {
-        $opts = $this->expandBtnOptions;
+        $opts  = $this->expandBtnOptions;
         $class = $this->mergeClass('btn btn-outline-secondary btn-sm', $opts);
-        return '<button class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . ' onclick="FluxUI.expandAll()" title="Expand all"'
-             . $this->renderAttributes($opts) . '>'
-             . '<i class="bi bi-arrows-expand"></i></button>';
+
+        $props = [
+            'class' => $class,
+            'attrs' => $opts,
+        ];
+
+        return $this->slot('btnExpand', $props, function () use ($props) {
+            return '<button class="' . htmlspecialchars($props['class'], ENT_QUOTES) . '"'
+                 . ' onclick="FluxUI.expandAll()" title="Expand all"'
+                 . $this->renderAttributes($props['attrs']) . '>'
+                 . '<i class="bi bi-arrows-expand"></i></button>';
+        });
     }
 
     protected function renderCollapseBtn(): string
     {
-        $opts = $this->collapseBtnOptions;
+        $opts  = $this->collapseBtnOptions;
         $class = $this->mergeClass('btn btn-outline-secondary btn-sm', $opts);
-        return '<button class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . ' onclick="FluxUI.collapseAll()" title="Collapse all"'
-             . $this->renderAttributes($opts) . '>'
-             . '<i class="bi bi-arrows-collapse"></i></button>';
+
+        $props = [
+            'class' => $class,
+            'attrs' => $opts,
+        ];
+
+        return $this->slot('btnCollapse', $props, function () use ($props) {
+            return '<button class="' . htmlspecialchars($props['class'], ENT_QUOTES) . '"'
+                 . ' onclick="FluxUI.collapseAll()" title="Collapse all"'
+                 . $this->renderAttributes($props['attrs']) . '>'
+                 . '<i class="bi bi-arrows-collapse"></i></button>';
+        });
     }
 
     protected function renderRerunBtn(): string
     {
-        $opts = $this->rerunBtnOptions;
+        $opts  = $this->rerunBtnOptions;
         $class = $this->mergeClass('btn btn-outline-secondary btn-sm', $opts);
-        return '<button class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . ' id="' . htmlspecialchars($this->id . '-rerun-btn', ENT_QUOTES) . '"'
-             . ' onclick="FluxUI.rerun()" disabled'
-             . $this->renderAttributes($opts) . '>'
-             . '<i class="bi bi-arrow-clockwise"></i>'
-             . ' <span class="d-none d-sm-inline">Re-run</span>'
-             . '</button>';
+        $btnId = $this->id . '-rerun-btn';
+
+        $props = [
+            'id'    => $btnId,
+            'class' => $class,
+            'attrs' => $opts,
+        ];
+
+        return $this->slot('btnRerun', $props, function () use ($props) {
+            return '<button class="' . htmlspecialchars($props['class'], ENT_QUOTES) . '"'
+                 . ' id="' . htmlspecialchars($props['id'], ENT_QUOTES) . '"'
+                 . ' onclick="FluxUI.rerun()" disabled'
+                 . $this->renderAttributes($props['attrs']) . '>'
+                 . '<i class="bi bi-arrow-clockwise"></i>'
+                 . ' <span class="d-none d-sm-inline">Re-run</span>'
+                 . '</button>';
+        });
     }
 
     protected function renderThemeBtn(): string
     {
-        $opts = $this->themeBtnOptions;
-        $class = $this->mergeClass('btn btn-outline-secondary btn-sm', $opts);
-        return '<button class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . ' onclick="FluxUI.toggleTheme()" title="Toggle theme"'
-             . $this->renderAttributes($opts) . '>'
-             . '<i id="' . htmlspecialchars($this->id . '-theme-icon', ENT_QUOTES) . '" class="bi bi-moon-stars"></i>'
-             . '</button>';
-    }
+        $opts    = $this->themeBtnOptions;
+        $class   = $this->mergeClass('btn btn-outline-secondary btn-sm', $opts);
+        $iconId  = $this->id . '-theme-icon';
 
-    public function render(): string
-    {
-        $opts = $this->options;
-        $class = $this->mergeClass('d-flex align-items-center gap-2 px-3 py-2 border-bottom bg-body-tertiary', $opts);
+        $props = [
+            'iconId' => $iconId,
+            'class'  => $class,
+            'attrs'  => $opts,
+        ];
 
-        $inner = $this->beforeContent
-               . $this->renderLayout($this->renderSections())
-               . $this->afterContent;
-
-        return '<div id="' . htmlspecialchars($this->id, ENT_QUOTES) . '"'
-             . ' class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . $this->renderAttributes($opts) . '>'
-             . $inner
-             . '</div>';
+        return $this->slot('btnTheme', $props, function () use ($props) {
+            return '<button class="' . htmlspecialchars($props['class'], ENT_QUOTES) . '"'
+                 . ' onclick="FluxUI.toggleTheme()" title="Toggle theme"'
+                 . $this->renderAttributes($props['attrs']) . '>'
+                 . '<i id="' . htmlspecialchars($props['iconId'], ENT_QUOTES) . '" class="bi bi-moon-stars"></i>'
+                 . '</button>';
+        });
     }
 }

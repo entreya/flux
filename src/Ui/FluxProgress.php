@@ -9,13 +9,14 @@ namespace Entreya\Flux\Ui;
  *
  * Layout: {bar}
  *
+ * Slots: bar
+ *
  * Options:
  *   - options        (array)  — outer progress container attributes
  *   - barOptions     (array)  — inner progress-bar <div> attributes
  *   - height         (string) — CSS height (default: '2px')
  *   - barClass       (string) — initial bar color class (default: 'bg-primary')
- *   - layout         (string) — template: '{bar}'
- *   - beforeContent / afterContent
+ *   - slots          (array)  — per-component render closures
  */
 class FluxProgress extends FluxWidget
 {
@@ -54,33 +55,51 @@ class FluxProgress extends FluxWidget
         ];
     }
 
+    // ── Pure Open/Close Tags ────────────────────────────────────────────────
+
+    protected function openTarget(): string
+    {
+        $opts  = $this->options;
+        $class = $this->mergeClass('progress', $opts);
+        $h     = htmlspecialchars($this->height, ENT_QUOTES);
+
+        return '<div class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
+             . ' style="height:' . $h . '"'
+             . $this->renderAttributes($opts) . '>';
+    }
+
+    protected function closeTarget(): string
+    {
+        return '</div>';
+    }
+
+    // ── Public Closure API ───────────────────────────────────────────────
+
+    public function bar(): string
+    {
+        return $this->renderBar();
+    }
+
+    // ── Internal Render Methods (with Slot Dispatch) ────────────────────────
+
     protected function renderBar(): string
     {
         $barOpts = $this->barOptions;
         $barClass = $this->mergeClass('progress-bar ' . $this->barClass, $barOpts);
 
-        return '<div class="' . htmlspecialchars($barClass, ENT_QUOTES) . '"'
-             . ' id="' . htmlspecialchars($this->id, ENT_QUOTES) . '"'
-             . ' style="width:0%;transition:width .5s ease"'
-             . ' role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"'
-             . $this->renderAttributes($barOpts)
-             . '></div>';
-    }
+        $props = [
+            'id'    => $this->id,
+            'class' => $barClass,
+            'attrs' => $barOpts,
+        ];
 
-    public function render(): string
-    {
-        $opts = $this->options;
-        $class = $this->mergeClass('progress', $opts);
-        $h = htmlspecialchars($this->height, ENT_QUOTES);
-
-        $inner = $this->beforeContent
-               . $this->renderLayout($this->renderSections())
-               . $this->afterContent;
-
-        return '<div class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . ' style="height:' . $h . '"'
-             . $this->renderAttributes($opts) . '>'
-             . $inner
-             . '</div>';
+        return $this->slot('bar', $props, function () use ($props) {
+            return '<div class="' . htmlspecialchars($props['class'], ENT_QUOTES) . '"'
+                 . ' id="' . htmlspecialchars($props['id'], ENT_QUOTES) . '"'
+                 . ' style="width:0%;transition:width .5s ease"'
+                 . ' role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"'
+                 . $this->renderAttributes($props['attrs'])
+                 . '></div>';
+        });
     }
 }

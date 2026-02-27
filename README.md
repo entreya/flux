@@ -328,6 +328,50 @@ use Entreya\Flux\Ui\{FluxAsset, FluxBadge, FluxToolbar, FluxLogPanel, FluxProgre
 
 That's it — 5 lines of PHP render a full GitHub Actions-style viewer.
 
+### Component-wise Decomposition (Closure Pattern)
+If the fixed string placeholders (e.g., `'{heading}{controls}'`) are too rigid, you can fully decompose any widget using the `render()` Closures. The closure receives the widget instance, allowing you to manually place every atomic part of the UI exactly where you want it.
+
+```php
+<?= FluxToolbar::render(['id' => 'myToolbar'], function (FluxToolbar $t) { ?>
+    <div class="row align-items-center">
+        <!-- Render just the heading here -->
+        <div class="col-8">
+            <?= $t->heading() ?>
+        </div>
+        <!-- Render custom layout constraints with atomic buttons -->
+        <div class="col-4 d-flex justify-content-end gap-2">
+            <?= $t->search() ?>
+            <div class="btn-group">
+                <?= $t->btnExpand() ?>
+                <?= $t->btnCollapse() ?>
+            </div>
+            <?= $t->btnRerun() ?>
+        </div>
+    </div>
+<?php }) ?>
+```
+
+### Slot Overrides (Per-Component Customization)
+Override any single component's HTML without subclassing or rewriting the layout. Use the `slots` config key with closures that receive `($widget, $props, $default)`:
+
+```php
+<?= FluxToolbar::widget([
+    'slots' => [
+        // Replace the rerun button with a download link
+        'btnRerun' => fn($w, $props, $default) =>
+            '<a href="/report" class="btn btn-sm btn-primary"><i class="bi bi-download"></i> Report</a>',
+        // Wrap search with a glow effect
+        'search' => fn($w, $props, $default) =>
+            '<div class="glow-wrapper">' . $default() . '</div>',
+        // Augment heading with a badge
+        'heading' => fn($w, $props, $default) =>
+            $default() . '<span class="badge text-bg-info ms-2">LIVE</span>',
+    ],
+]) ?>
+```
+
+See [Closure API Documentation](docs/CLOSURE_API.md) for the complete 4-tier customization reference.
+
 ---
 
 ### Component Reference
@@ -636,9 +680,10 @@ es.addEventListener('workflow_complete', () => es.close());
 
 ---
 
-## Framework Integration
+## Documentation
 
-- [**Yii2 Integration Recipe**](docs/YII2_INTEGRATION.md) — Complete guide for Controller, View, and Background implementation.
+- [**Widget API Reference**](docs/WIDGET_API.md) — Complete reference for every widget, config option, slot, method, and selector.
+- [**Yii2 Integration Recipe**](docs/YII2_INTEGRATION.md) — Controller, View, and Background implementation guide.
 - **Laravel / Symfony**: Similar principles apply — use SSE headers and disable output buffering.
 
 ## License

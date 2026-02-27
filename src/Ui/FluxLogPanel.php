@@ -12,6 +12,8 @@ use Entreya\Flux\Ui\Renderer\StepRendererInterface;
  *
  * Layout: {beforeSteps}{steps}{afterSteps}
  *
+ * Slots: stepsContainer
+ *
  * Options:
  *   - options            (array)           — root <div> attributes
  *   - stepRenderer       (string|object)   — class name or instance implementing StepRendererInterface
@@ -20,11 +22,10 @@ use Entreya\Flux\Ui\Renderer\StepRendererInterface;
  *   - logBodyOptions     (array)           — default attributes for log body (passed to JS)
  *   - beforeSteps        (string)          — HTML inserted before the steps container
  *   - afterSteps         (string)          — HTML inserted after the steps container
- *   - pluginOptions      (array)           — JS behavior config:
- *       - autoCollapse   (bool)  — auto-close steps on success (default: true)
- *       - autoScroll     (bool)  — auto-scroll on new log lines (default: true)
+ *   - jobHeaderTemplate  (string)          — HTML template for job headers
+ *   - pluginOptions      (array)           — JS behavior config
  *   - pluginEvents       (array)           — JS event hooks
- *   - layout             (string)          — template: '{beforeSteps}{steps}{afterSteps}'
+ *   - slots              (array)           — per-component render closures
  */
 class FluxLogPanel extends FluxWidget
 {
@@ -34,6 +35,7 @@ class FluxLogPanel extends FluxWidget
     protected array $stepOptions       = [];
     protected array $stepHeaderOptions = [];
     protected array $logBodyOptions    = [];
+    protected string $jobHeaderTemplate = '';
     protected string $beforeSteps      = '';
     protected string $afterSteps       = '';
 
@@ -49,11 +51,16 @@ class FluxLogPanel extends FluxWidget
         $this->stepOptions       = $config['stepOptions'] ?? [];
         $this->stepHeaderOptions = $config['stepHeaderOptions'] ?? [];
         $this->logBodyOptions    = $config['logBodyOptions'] ?? [];
+        $this->jobHeaderTemplate = $config['jobHeaderTemplate'] ?? '';
         $this->beforeSteps       = $config['beforeSteps'] ?? '';
         $this->afterSteps        = $config['afterSteps'] ?? '';
 
         // Register the step template and collapse method with FluxAsset
         FluxAsset::registerTemplate('step', $this->stepRenderer->jsTemplate());
+
+        if ($this->jobHeaderTemplate) {
+            FluxAsset::registerTemplate('jobHeader', $this->jobHeaderTemplate);
+        }
         FluxAsset::registerPluginOptions('logPanel', [
             'collapseMethod' => $this->stepRenderer->collapseMethod(),
         ]);
@@ -129,25 +136,49 @@ CSS;
         ];
     }
 
-    protected function renderStepsContainer(): string
+    // ── Default Closure ─────────────────────────────────────────────────────
+
+    protected function defaultClosure(): \Closure
     {
-        // This is just the container — JS fills it dynamically
-        return '';
+        return function (self $w): void {
+            echo $w->beforeContent;
+            echo $w->beforeSteps;
+            echo $w->stepsContainer();
+            echo $w->afterSteps;
+            echo $w->afterContent;
+        };
     }
 
-    public function render(): string
+    // ── Pure Open/Close Tags ────────────────────────────────────────────────
+
+    protected function openTarget(): string
     {
-        $opts = $this->options;
-        $class = $this->mergeClass('flex-grow-1 overflow-auto', $opts);
+        return $this->openTag('div', $this->id, 'flex-grow-1 overflow-auto', $this->options);
+    }
 
-        $inner = $this->beforeContent
-               . $this->renderLayout($this->renderSections())
-               . $this->afterContent;
+    protected function closeTarget(): string
+    {
+        return '</div>';
+    }
 
-        return '<div id="' . htmlspecialchars($this->id, ENT_QUOTES) . '"'
-             . ' class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . $this->renderAttributes($opts) . '>'
-             . $inner
-             . '</div>';
+    // ── Public Closure API ───────────────────────────────────────────────
+
+    public function stepsContainer(): string
+    {
+        return $this->renderStepsContainer();
+    }
+
+    // ── Internal Render Methods (with Slot Dispatch) ────────────────────────
+
+    protected function renderStepsContainer(): string
+    {
+        $props = [
+            'id' => $this->id,
+        ];
+
+        return $this->slot('stepsContainer', $props, function () {
+            // This is just the container — JS fills it dynamically
+            return '';
+        });
     }
 }

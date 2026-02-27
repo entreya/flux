@@ -9,6 +9,8 @@ namespace Entreya\Flux\Ui;
  *
  * Layout: {jobList}{footer}
  *
+ * Slots: jobList, footer
+ *
  * Options:
  *   - options         (array)  — root <nav> HTML attributes
  *   - listOptions     (array)  — job list container attributes
@@ -18,8 +20,7 @@ namespace Entreya\Flux\Ui;
  *   - trigger         (string) — trigger label (default: 'manual')
  *   - showFooter      (bool)   — show the runner info footer (default: true)
  *   - emptyText       (string) — placeholder text when no jobs
- *   - layout          (string) — template: '{jobList}{footer}'
- *   - beforeContent / afterContent
+ *   - slots           (array)  — per-component render closures
  */
 class FluxSidebar extends FluxWidget
 {
@@ -81,66 +82,114 @@ CSS;
         ];
     }
 
+    // ── Default Closure ─────────────────────────────────────────────────────
+
+    protected function defaultClosure(): \Closure
+    {
+        return function (self $w): void {
+            echo $w->beforeContent;
+            echo $w->jobList();
+            if ($w->showFooter) {
+                echo $w->footer();
+            }
+            echo $w->afterContent;
+        };
+    }
+
+    // ── Pure Open/Close Tags ────────────────────────────────────────────────
+
+    protected function openTarget(): string
+    {
+        return $this->openTag('nav', $this->id, 'd-flex flex-column border-end bg-body-tertiary', $this->options);
+    }
+
+    protected function closeTarget(): string
+    {
+        return '</nav>';
+    }
+
+    // ── Public Closure API ───────────────────────────────────────────────
+
+    public function jobList(): string
+    {
+        return $this->renderJobList();
+    }
+
+    public function footer(): string
+    {
+        return $this->renderFooter();
+    }
+
+    // ── Internal Render Methods (with Slot Dispatch) ────────────────────────
+
     protected function renderJobList(): string
     {
-        $opts = $this->listOptions;
-        $class = $this->mergeClass('list-group list-group-flush', $opts);
-        $listId = htmlspecialchars($this->id . '-job-list', ENT_QUOTES);
-        $empty = htmlspecialchars($this->emptyText, ENT_QUOTES);
+        $opts   = $this->listOptions;
+        $class  = $this->mergeClass('list-group list-group-flush', $opts);
+        $listId = $this->id . '-job-list';
 
-        return '<div class="flex-grow-1 overflow-auto p-2">'
-             . '<p class="text-uppercase text-body-secondary fw-semibold small mb-2 px-1" style="font-size:11px;letter-spacing:.5px">Jobs</p>'
-             . '<div id="' . $listId . '" class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . $this->renderAttributes($opts) . '>'
-             . '<div class="flux-sidebar-empty text-body-secondary fst-italic small p-2">' . $empty . '</div>'
-             . '</div>'
-             . '</div>';
+        $props = [
+            'id'        => $listId,
+            'class'     => $class,
+            'emptyText' => $this->emptyText,
+            'attrs'     => $opts,
+        ];
+
+        return $this->slot('jobList', $props, function () use ($props) {
+            $listId = htmlspecialchars($props['id'], ENT_QUOTES);
+            $class  = htmlspecialchars($props['class'], ENT_QUOTES);
+            $empty  = htmlspecialchars($props['emptyText'], ENT_QUOTES);
+
+            return '<div class="flex-grow-1 overflow-auto p-2">'
+                 . '<p class="text-uppercase text-body-secondary fw-semibold small mb-2 px-1" style="font-size:11px;letter-spacing:.5px">Jobs</p>'
+                 . '<div id="' . $listId . '" class="' . $class . '"'
+                 . $this->renderAttributes($props['attrs']) . '>'
+                 . '<div class="flux-sidebar-empty text-body-secondary fst-italic small p-2">' . $empty . '</div>'
+                 . '</div>'
+                 . '</div>';
+        });
     }
 
     protected function renderFooter(): string
     {
         $opts = $this->footerOptions;
         $class = $this->mergeClass('border-top small p-2', $opts);
-        $wf = htmlspecialchars($this->workflowName, ENT_QUOTES);
-        $trigger = htmlspecialchars($this->trigger, ENT_QUOTES);
 
-        $html = '<div class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-              . $this->renderAttributes($opts) . '>';
+        $props = [
+            'class'        => $class,
+            'workflowName' => $this->workflowName,
+            'trigger'      => $this->trigger,
+            'phpVersion'   => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION,
+            'attrs'        => $opts,
+        ];
 
-        if ($wf) {
+        return $this->slot('footer', $props, function () use ($props) {
+            $class   = htmlspecialchars($props['class'], ENT_QUOTES);
+            $wf      = htmlspecialchars($props['workflowName'], ENT_QUOTES);
+            $trigger = htmlspecialchars($props['trigger'], ENT_QUOTES);
+
+            $html = '<div class="' . $class . '"'
+                  . $this->renderAttributes($props['attrs']) . '>';
+
+            if ($wf) {
+                $html .= '<div class="d-flex justify-content-between px-1 py-1">'
+                       . '<span class="text-body-secondary">Workflow</span>'
+                       . '<span class="text-body-emphasis font-monospace text-truncate" style="max-width:140px">' . $wf . '</span>'
+                       . '</div>';
+            }
+
             $html .= '<div class="d-flex justify-content-between px-1 py-1">'
-                   . '<span class="text-body-secondary">Workflow</span>'
-                   . '<span class="text-body-emphasis font-monospace text-truncate" style="max-width:140px">' . $wf . '</span>'
+                   . '<span class="text-body-secondary">Trigger</span>'
+                   . '<span class="text-body-emphasis font-monospace">' . $trigger . '</span>'
                    . '</div>';
-        }
 
-        $html .= '<div class="d-flex justify-content-between px-1 py-1">'
-               . '<span class="text-body-secondary">Trigger</span>'
-               . '<span class="text-body-emphasis font-monospace">' . $trigger . '</span>'
-               . '</div>';
+            $html .= '<div class="d-flex justify-content-between px-1 py-1">'
+                   . '<span class="text-body-secondary">Runner</span>'
+                   . '<span class="text-body-emphasis font-monospace">php-' . $props['phpVersion'] . '</span>'
+                   . '</div>';
 
-        $html .= '<div class="d-flex justify-content-between px-1 py-1">'
-               . '<span class="text-body-secondary">Runner</span>'
-               . '<span class="text-body-emphasis font-monospace">php-' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '</span>'
-               . '</div>';
-
-        $html .= '</div>';
-        return $html;
-    }
-
-    public function render(): string
-    {
-        $opts = $this->options;
-        $class = $this->mergeClass('d-flex flex-column border-end bg-body-tertiary', $opts);
-
-        $inner = $this->beforeContent
-               . $this->renderLayout($this->renderSections())
-               . $this->afterContent;
-
-        return '<nav id="' . htmlspecialchars($this->id, ENT_QUOTES) . '" '
-             . 'class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . $this->renderAttributes($opts) . '>'
-             . $inner
-             . '</nav>';
+            $html .= '</div>';
+            return $html;
+        });
     }
 }

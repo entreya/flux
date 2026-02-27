@@ -5,10 +5,24 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `[FEAT]` **Slot system:** Per-component render closures via `slots` config key. Override, wrap, or augment any widget sub-component without subclassing.
+- `[FEAT]` `FluxBadge` — public `dot()` and `text()` methods for closure pattern.
+- `[FEAT]` Comprehensive `FluxWidgetTest` — 37 test methods, 93 assertions.
+- `[DOCS]` `docs/WIDGET_API.md` — Complete API reference for every widget, config, slot, method, and selector.
+
+### Changed
+- `[REFACTOR]` **Closure-first architecture:** All widgets use a single `render()` pipeline via `defaultClosure()`. Eliminated `renderLegacy()`.
+- `[REFACTOR]` `openTarget()`/`closeTarget()` — now pure tag open/close, no content injection.
+- `[FIX]` `FluxBadge` — added missing `openTarget()`/`closeTarget()`. Supports closure rendering.
+- `[REFACTOR]` `beforeContent`/`afterContent` — consistently in `defaultClosure()` only.
+- `[DOCS]` Removed `CLOSURE_API.md` and `specs/FLUX_LAYOUT_CLOSURE.md` — consolidated into `WIDGET_API.md`.
+
+### Added
 - `[FEAT]` `ChannelInterface` — formal contract for all event transport channels.
 - `[FEAT]` `RedisChannel` — Redis Streams (XADD/XREAD BLOCK) for multi-server/auto-scale with heartbeat liveness + auto-expire.
 - `[FEAT]` `DatabaseChannel` — MySQL/Postgres channel with polling, heartbeat, auto-migrate schema, and cleanup utility.
 - `[FEAT]` Kartik/GridView-style widget architecture with layout templates, named render methods, and per-sub-element options.
+- `[FEAT]` Added Closure-based layout support for FluxUI components via `static::render()`, allowing custom HTML wrappers and atomic UI decomposition.
 - `[FEAT]` `StepRendererInterface` + `DetailsStepRenderer` + `AccordionStepRenderer` — swappable step markup (Column pattern).
 - `[FEAT]` `pluginOptions` and `pluginEvents` — JS behavior config and event hooks from PHP.
 - `[FEAT]` `beforeContent` / `afterContent` hooks on every widget.

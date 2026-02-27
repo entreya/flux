@@ -9,15 +9,15 @@ namespace Entreya\Flux\Ui;
  *
  * Layout: {dot}{text}
  *
+ * Slots: dot, text
+ *
  * Options:
  *   - id             (string)  — element ID
  *   - options        (array)   — root element HTML attributes
  *   - dotOptions     (array)   — dot <span> HTML attributes
  *   - textOptions    (array)   — text <span> HTML attributes
  *   - initialText    (string)  — default text (default: 'Connecting')
- *   - layout         (string)  — template: '{dot}{text}'
- *   - beforeContent  (string)  — arbitrary HTML before badge
- *   - afterContent   (string)  — arbitrary HTML after badge
+ *   - slots          (array)   — per-component render closures
  */
 class FluxBadge extends FluxWidget
 {
@@ -70,41 +70,73 @@ CSS;
         ];
     }
 
-    protected function renderDot(): string
-    {
-        $opts = $this->dotOptions;
-        $class = $this->mergeClass('flux-badge-dot', $opts);
-        return '<span class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
-             . $this->renderAttributes($opts) . '></span>';
-    }
+    // ── Pure Open/Close Tags ────────────────────────────────────────────────
 
-    protected function renderText(): string
+    protected function openTarget(): string
     {
-        $opts = $this->textOptions;
-        $id = htmlspecialchars($this->id . '-text', ENT_QUOTES);
-        return '<span id="' . $id . '"'
-             . $this->renderAttributes($opts) . '>'
-             . htmlspecialchars($this->initialText, ENT_QUOTES)
-             . '</span>';
-    }
-
-    public function render(): string
-    {
-        $opts = $this->options;
+        $opts  = $this->options;
         $class = $this->mergeClass(
             'badge rounded-pill text-bg-secondary d-inline-flex align-items-center gap-1',
             $opts
         );
 
-        $inner = $this->beforeContent
-               . $this->renderLayout($this->renderSections())
-               . $this->afterContent;
+        return '<span id="' . htmlspecialchars($this->id, ENT_QUOTES) . '"'
+             . ' class="' . htmlspecialchars($class, ENT_QUOTES) . '"'
+             . ' data-status="pending"'
+             . $this->renderAttributes($opts) . '>';
+    }
 
-        return '<span id="' . htmlspecialchars($this->id, ENT_QUOTES) . '" '
-             . 'class="' . htmlspecialchars($class, ENT_QUOTES) . '" '
-             . 'data-status="pending"'
-             . $this->renderAttributes($opts) . '>'
-             . $inner
-             . '</span>';
+    protected function closeTarget(): string
+    {
+        return '</span>';
+    }
+
+    // ── Public Closure API ───────────────────────────────────────────────
+
+    public function dot(): string
+    {
+        return $this->renderDot();
+    }
+
+    public function text(): string
+    {
+        return $this->renderText();
+    }
+
+    // ── Internal Render Methods (with Slot Dispatch) ────────────────────────
+
+    protected function renderDot(): string
+    {
+        $opts  = $this->dotOptions;
+        $class = $this->mergeClass('flux-badge-dot', $opts);
+
+        $props = [
+            'class' => $class,
+            'attrs' => $opts,
+        ];
+
+        return $this->slot('dot', $props, function () use ($props) {
+            return '<span class="' . htmlspecialchars($props['class'], ENT_QUOTES) . '"'
+                 . $this->renderAttributes($props['attrs']) . '></span>';
+        });
+    }
+
+    protected function renderText(): string
+    {
+        $opts = $this->textOptions;
+        $tId  = $this->id . '-text';
+
+        $props = [
+            'id'    => $tId,
+            'text'  => $this->initialText,
+            'attrs' => $opts,
+        ];
+
+        return $this->slot('text', $props, function () use ($props) {
+            return '<span id="' . htmlspecialchars($props['id'], ENT_QUOTES) . '"'
+                 . $this->renderAttributes($props['attrs']) . '>'
+                 . htmlspecialchars($props['text'], ENT_QUOTES)
+                 . '</span>';
+        });
     }
 }

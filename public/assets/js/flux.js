@@ -33,7 +33,6 @@ const FluxUI = (() => {
     fileInput: 'fx-file-input',
   };
 
-  // ── Default step template (details/summary) ─────────────────────────────
   const DEFAULT_STEP_TPL =
     '<details class="flux-step" id="{id}" data-job="{job}" data-step="{step}" data-status="pending" open>'
     + '<summary class="flux-step-summary">'
@@ -46,11 +45,20 @@ const FluxUI = (() => {
     + '<div class="flux-log-body" id="{logs_id}"></div>'
     + '</details>';
 
+  const DEFAULT_JOB_HEADER_TPL =
+    '<div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom bg-body-tertiary sticky-top" id="{header_id}">'
+    + '<i class="bi bi-circle text-secondary" id="{icon_id}"></i>'
+    + '<span class="fw-semibold small flex-grow-1">{name}</span>'
+    + '<small class="text-body-secondary font-monospace" id="{prog_id}">0/{total_steps} steps</small>'
+    + '<small class="text-body-secondary font-monospace" id="{dur_id}"></small>'
+    + '</div>';
+
   // ── State ────────────────────────────────────────────────────────────────
   let es = null;
   let cfg = {};
   let sel = {};               // merged selector map
   let stepTpl = '';           // step HTML template
+  let jobHeaderTpl = '';      // job header HTML template
   let collapseMethod = 'details'; // 'details' or 'accordion'
   let hooks = {};             // custom event hooks
   let lineIdx = {};           // { "jobId-stepKey": lineNumber }
@@ -351,15 +359,18 @@ const FluxUI = (() => {
     const group = el('div', '', { id: pfx('job-group', id), 'data-flux-job': id });
 
     const total = preCount + stepCount + postCount;
-    group.innerHTML = `
-      <div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom bg-body-tertiary sticky-top" id="${pfx('job-header', id)}">
-        <i class="bi bi-circle text-secondary" id="${pfx('jhdr-icon', id)}"></i>
-        <span class="fw-semibold small flex-grow-1">${esc(name)}</span>
-        <small class="text-body-secondary font-monospace" id="${pfx('jhdr-prog', id)}">0/${total} steps</small>
-        <small class="text-body-secondary font-monospace" id="${pfx('jhdr-dur', id)}"></small>
-      </div>
-      <div class="px-2 py-1" id="${pfx('job-steps', id)}"></div>
-    `;
+
+    // Replace placeholders in the header template
+    const headerHtml = jobHeaderTpl
+      .replace(/\{header_id\}/g, pfx('job-header', id))
+      .replace(/\{icon_id\}/g, pfx('jhdr-icon', id))
+      .replace(/\{prog_id\}/g, pfx('jhdr-prog', id))
+      .replace(/\{dur_id\}/g, pfx('jhdr-dur', id))
+      .replace(/\{name\}/g, esc(name))
+      .replace(/\{job\}/g, esc(id))
+      .replace(/\{total_steps\}/g, total);
+
+    group.innerHTML = headerHtml + `\n      <div class="px-2 py-1" id="${pfx('job-steps', id)}"></div>\n    `;
     steps.appendChild(group);
   }
 
@@ -710,8 +721,9 @@ const FluxUI = (() => {
     // Merge selectors with defaults
     sel = { ...SEL_DEFAULTS, ...(cfg.sel ?? {}) };
 
-    // Step template from PHP or default
+    // Templates from PHP or default
     stepTpl = cfg.templates?.step ?? DEFAULT_STEP_TPL;
+    jobHeaderTpl = cfg.templates?.jobHeader ?? DEFAULT_JOB_HEADER_TPL;
 
     // Plugin options
     const lp = cfg.plugins?.logPanel ?? {};
