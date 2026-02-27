@@ -19,8 +19,8 @@ class StepsContainer extends FluxComponent
 
     protected function template(): string
     {
-        // Empty — JS fills it dynamically
-        return '';
+        // JS appends step elements into this container
+        return '<div id="{id}" class="{class}"></div>';
     }
 
     protected function registerSelectors(): void
