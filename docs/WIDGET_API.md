@@ -200,7 +200,6 @@ Component::render([
 |------|---------|-------------|
 | `id` | `fx-log-panel` | Root element ID |
 | `class` | `flex-grow-1 overflow-auto` | Root CSS |
-| `stepRenderer` | `DetailsStepRenderer::class` | Step HTML renderer |
 | `jobHeaderTemplate` | `''` | Custom job header HTML (raw, not escaped) |
 | `beforeSteps` | `''` | Raw HTML before steps (not escaped) |
 | `afterSteps` | `''` | Raw HTML after steps (not escaped) |

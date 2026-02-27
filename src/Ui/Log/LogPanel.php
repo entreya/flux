@@ -6,8 +6,6 @@ namespace Entreya\Flux\Ui\Log;
 
 use Entreya\Flux\Ui\FluxComponent;
 use Entreya\Flux\Ui\FluxRenderer;
-use Entreya\Flux\Ui\Renderer\DetailsStepRenderer;
-use Entreya\Flux\Ui\Renderer\StepRendererInterface;
 
 /**
  * Log panel component — step accordions and log lines container.
@@ -15,19 +13,30 @@ use Entreya\Flux\Ui\Renderer\StepRendererInterface;
  * Slots: stepsContainer
  *
  * Special props:
- *   stepRenderer      — class or instance of StepRendererInterface
  *   jobHeaderTemplate — custom HTML template for JS-rendered job headers
  *   beforeSteps       — HTML before steps
  *   afterSteps        — HTML after steps
  */
 class LogPanel extends FluxComponent
 {
+    /** Step template using native <details>/<summary>. No Bootstrap JS needed. */
+    private const STEP_TEMPLATE =
+        '<details class="flux-step" id="{id}" data-job="{job}" data-step="{step}" data-status="pending" open>'
+        . '<summary class="flux-step-summary">'
+        .   '<div class="flux-step-ico is-pending" id="{icon_id}"></div>'
+        .   '{phase}'
+        .   '<span class="flux-step-name">{name}</span>'
+        .   '<span class="flux-step-dur" id="{dur_id}"></span>'
+        .   '<i class="bi bi-chevron-right flux-step-chevron"></i>'
+        . '</summary>'
+        . '<div class="flux-log-body" id="{logs_id}"></div>'
+        . '</details>';
+
     protected function defaults(): array
     {
         return [
             'id'                => 'fx-log-panel',
             'class'             => 'flex-grow-1 overflow-auto',
-            'stepRenderer'      => DetailsStepRenderer::class,
             'jobHeaderTemplate' => '',
             'beforeSteps'       => '',
             'afterSteps'        => '',
@@ -53,16 +62,9 @@ class LogPanel extends FluxComponent
 
     protected function registerSelectors(): void
     {
-        // Register step template and collapse method
-        $renderer = $this->props['stepRenderer'];
-        if (is_string($renderer)) {
-            /** @var StepRendererInterface $renderer */
-            $renderer = new $renderer();
-        }
-
-        FluxRenderer::registerTemplate('step', $renderer->jsTemplate());
+        FluxRenderer::registerTemplate('step', self::STEP_TEMPLATE);
         FluxRenderer::registerPluginOptions('logPanel', [
-            'collapseMethod' => $renderer->collapseMethod(),
+            'collapseMethod' => 'details',
         ]);
 
         if ($this->props['jobHeaderTemplate']) {
