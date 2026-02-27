@@ -226,15 +226,13 @@ abstract class FluxComponent
             $raw = ($this->contentOverride instanceof \Closure)
                 ? ($this->contentOverride)($this->props)
                 : $this->contentOverride;
-
-            // Still interpolate {prop} tokens in the override
-            return $this->interpolateProps((string) $raw);
+            $html = (string) $raw;
+        } else {
+            // Use the component's template
+            $html = $this->template();
         }
 
-        // Use the component's template
-        $html = $this->template();
-
-        // Replace {slot:name} tokens
+        // Replace {slot:name} tokens (works for both template and content override)
         foreach ($resolvedSlots as $name => $slotHtml) {
             $html = str_replace('{slot:' . $name . '}', $slotHtml, $html);
         }
