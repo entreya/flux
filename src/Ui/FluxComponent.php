@@ -15,7 +15,7 @@ namespace Entreya\Flux\Ui;
  *   - slots()     → named child components
  *
  * Customization levels:
- *   Options  — override props via ['props' => [...]]
+ *   Props    — override props via ['props' => [...]]
  *   Slots    — override child components via ['slots' => [...]]
  *   Content  — replace template entirely via ['content' => ...]
  *   Style    — add/replace CSS via ['style' => ...]
@@ -25,13 +25,13 @@ namespace Entreya\Flux\Ui;
  */
 abstract class FluxComponent
 {
-    /** Resolved props (defaults merged with overrides) */
+    /** @var array<string, mixed> Resolved props (defaults merged with overrides) */
     protected array $props = [];
 
-    /** Slot overrides from user config */
+    /** @var array<string, mixed> Slot overrides from user config */
     protected array $slotOverrides = [];
 
-    /** User-provided content override (string or Closure) */
+    /** User-provided content override */
     protected string|\Closure|null $contentOverride = null;
 
     /** User-provided style override/addition */
@@ -91,7 +91,7 @@ abstract class FluxComponent
      * Prop names whose values contain raw HTML and should NOT be escaped.
      * Override in subclasses that have HTML-containing props.
      *
-     * @return string[]
+     * @return list<string>
      */
     protected function rawProps(): array
     {
@@ -103,34 +103,28 @@ abstract class FluxComponent
     /**
      * Render this component with optional overrides.
      *
-     * @param array $config Optional overrides:
-     *   'props'   => array    — merged with defaults()
-     *   'slots'   => array    — per-slot overrides (string|array|Closure|false|class-string)
-     *   'content' => string|Closure — replace template entirely
-     *   'style'   => string   — additional/replacement CSS
-     *   'script'  => string   — additional/replacement JS
+     * @param array{
+     *   props?:   array<string, mixed>,
+     *   slots?:   array<string, mixed>,
+     *   content?: string|\Closure,
+     *   style?:   string,
+     *   script?:  string,
+     * } $config
      */
     public static function render(array $config = []): string
     {
         /** @phpstan-ignore new.static */
-        $component = new static();
-        $component->configure($config);
+        $instance = new static();
+        $instance->configure($config);
 
-        // 1. Resolve all slots → HTML strings
-        $resolvedSlots = $component->resolveSlots();
-
-        // 2. Build content: user override or template
-        $html = $component->buildContent($resolvedSlots);
-
-        // 3. Register assets (style + script)
-        $component->registerAssets();
+        $resolvedSlots = $instance->resolveSlots();
+        $html          = $instance->buildContent($resolvedSlots);
+        $instance->registerAssets();
 
         return $html;
     }
 
-    /**
-     * Convenience alias — matches Yii2 widget() convention.
-     */
+    /** Convenience alias — matches Yii2 widget() convention. */
     public static function widget(array $config = []): string
     {
         return static::render($config);
@@ -138,15 +132,11 @@ abstract class FluxComponent
 
     // ── Internal Pipeline ───────────────────────────────────────────────────
 
-    /**
-     * Merge user config into the component instance.
-     */
+    /** Merge user config into the component instance. */
     protected function configure(array $config): void
     {
-        // Merge props: defaults ← user overrides
-        $this->props = array_merge($this->defaults(), $config['props'] ?? []);
-
-        $this->slotOverrides  = $config['slots'] ?? [];
+        $this->props           = array_merge($this->defaults(), $config['props'] ?? []);
+        $this->slotOverrides   = $config['slots'] ?? [];
         $this->contentOverride = $config['content'] ?? null;
         $this->styleOverride   = $config['style'] ?? null;
         $this->scriptOverride  = $config['script'] ?? null;
@@ -156,13 +146,13 @@ abstract class FluxComponent
      * Resolve every declared slot to an HTML string.
      *
      * Override types:
-     *   string         → raw HTML
-     *   array          → config passed to the default slot component
-     *   Closure        → called with parent props, returns HTML
-     *   false          → slot not rendered
-     *   class-string   → different component class rendered
+     *   string       → raw HTML
+     *   array        → config passed to the default slot component
+     *   Closure      → called with parent props, returns HTML
+     *   false        → slot not rendered
+     *   class-string → different component class rendered
      *
-     * @return array<string, string>  slot name → rendered HTML
+     * @return array<string, string>
      */
     protected function resolveSlots(): array
     {
@@ -172,81 +162,68 @@ abstract class FluxComponent
         foreach ($declared as $name => $defaultClass) {
             $override = $this->slotOverrides[$name] ?? null;
 
+            // Explicitly disabled — no HTML, no CSS, no JS
             if ($override === false) {
-                // Explicitly disabled — no HTML, no CSS, no JS
                 $resolved[$name] = '';
                 continue;
             }
 
+            // No override — render default component
             if ($override === null) {
-                // No override — render default component
-                /** @var FluxComponent $defaultClass */
                 $resolved[$name] = $defaultClass::render($this->childConfig($name));
                 continue;
             }
 
+            // String: raw HTML or component class name
             if (is_string($override)) {
-                if (is_subclass_of($override, FluxComponent::class)) {
-                    // It's a component class name
-                    $resolved[$name] = $override::render($this->childConfig($name));
-                } else {
-                    // Raw HTML string
-                    $resolved[$name] = $override;
-                }
+                $resolved[$name] = is_subclass_of($override, self::class)
+                    ? $override::render($this->childConfig($name))
+                    : $override;
                 continue;
             }
 
+            // Array: config → default component
             if (is_array($override)) {
-                // Config array → passed to the default component
                 $resolved[$name] = $defaultClass::render($override);
                 continue;
             }
 
+            // Closure: custom rendering
             if ($override instanceof \Closure) {
-                // Closure → call with parent props
                 $result = $override($this->props);
                 $resolved[$name] = is_string($result) ? $result : '';
                 continue;
             }
 
-            // Unknown type — skip
             $resolved[$name] = '';
         }
 
         return $resolved;
     }
 
-    /**
-     * Build the final HTML content.
-     */
+    /** Build the final HTML content. */
     protected function buildContent(array $resolvedSlots): string
     {
         if ($this->contentOverride !== null) {
-            // User replaced template entirely
-            $raw = ($this->contentOverride instanceof \Closure)
+            $raw  = ($this->contentOverride instanceof \Closure)
                 ? ($this->contentOverride)($this->props)
                 : $this->contentOverride;
             $html = (string) $raw;
         } else {
-            // Use the component's template
             $html = $this->template();
         }
 
         // Replace {slot:name} tokens (works for both template and content override)
         foreach ($resolvedSlots as $name => $slotHtml) {
-            $html = str_replace('{slot:' . $name . '}', $slotHtml, $html);
+            $html = str_replace("{slot:{$name}}", $slotHtml, $html);
         }
 
-        // Replace {prop} tokens
         return $this->interpolateProps($html);
     }
 
-    /**
-     * Register this component's style and script with the renderer.
-     */
+    /** Register this component's style and script with the renderer. */
     protected function registerAssets(): void
     {
-        // Style: user override OR component default, deduped by class
         $css = $this->styleOverride ?? $this->style();
         if ($css !== '' && $css !== null) {
             $key = $this->styleOverride !== null
@@ -255,14 +232,12 @@ abstract class FluxComponent
             FluxRenderer::registerStyle($key, $css);
         }
 
-        // Script: per instance (interpolated with props)
         $js = $this->scriptOverride ?? $this->script();
         if ($js !== '' && $js !== null) {
             $instanceKey = static::class . ':' . ($this->props['id'] ?? spl_object_id($this));
-            FluxRenderer::registerScript($instanceKey, $this->interpolateProps($js, false));
+            FluxRenderer::registerScript($instanceKey, $this->interpolateProps($js, escape: false));
         }
 
-        // Register selectors for FluxUI.init()
         if (isset($this->props['id'])) {
             $this->registerSelectors();
         }
@@ -274,7 +249,6 @@ abstract class FluxComponent
      */
     protected function registerSelectors(): void
     {
-        // Default: no selectors. Subclasses override.
     }
 
     // ── Interpolation ───────────────────────────────────────────────────────
@@ -282,24 +256,27 @@ abstract class FluxComponent
     /**
      * Replace {key} tokens with prop values.
      *
-     * @param bool $escape Whether to htmlspecialchars the values (true for HTML, false for JS)
+     * @param bool $escape Whether to htmlspecialchars the values
      */
     protected function interpolateProps(string $template, bool $escape = true): string
     {
-        $raw = array_flip($this->rawProps());
+        $rawKeys      = array_flip($this->rawProps());
         $replacements = [];
+
         foreach ($this->props as $key => $value) {
-            if (is_scalar($value)) {
-                $shouldEscape = $escape && !isset($raw[$key]);
-                $replacements['{' . $key . '}'] = $shouldEscape
-                    ? htmlspecialchars((string) $value, ENT_QUOTES)
-                    : (string) $value;
+            if (!is_scalar($value)) {
+                continue;
             }
+            $shouldEscape              = $escape && !isset($rawKeys[$key]);
+            $replacements["{$key}"] = $shouldEscape
+                ? htmlspecialchars((string) $value, ENT_QUOTES)
+                : (string) $value;
         }
+
         return str_replace(
-            array_keys($replacements),
+            array_map(static fn(string $k): string => '{' . $k . '}', array_keys($replacements)),
             array_values($replacements),
-            $template
+            $template,
         );
     }
 
@@ -307,7 +284,7 @@ abstract class FluxComponent
      * Build config for a child slot component.
      * Override to pass parent props down to specific children.
      *
-     * @return array Config to pass to the child component's render()
+     * @return array<string, mixed>
      */
     protected function childConfig(string $slotName): array
     {
@@ -316,19 +293,13 @@ abstract class FluxComponent
 
     // ── Prop Access ─────────────────────────────────────────────────────────
 
-    /**
-     * Get a resolved prop value.
-     */
+    /** Get a resolved prop value. */
     public function prop(string $key, mixed $default = null): mixed
     {
         return $this->props[$key] ?? $default;
     }
 
-    /**
-     * Get all resolved props.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function props(): array
     {
         return $this->props;

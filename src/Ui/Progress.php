@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Entreya\Flux\Ui;
 
+use Entreya\Flux\Ui\Progress\Bar;
+
 /**
- * Progress bar component.
+ * Progress bar — tracks workflow completion percentage.
  *
  * Slots: bar
  */
@@ -23,31 +25,19 @@ class Progress extends FluxComponent
 
     protected function slots(): array
     {
-        return [
-            'bar' => Progress\Bar::class,
-        ];
+        return ['bar' => Bar::class];
+    }
+
+    protected function childConfig(string $slotName): array
+    {
+        return match ($slotName) {
+            'bar' => ['props' => ['class' => $this->props['barClass']]],
+            default => [],
+        };
     }
 
     protected function template(): string
     {
         return '<div class="{class}" style="height:{height}">{slot:bar}</div>';
-    }
-
-    protected function childConfig(string $slotName): array
-    {
-        if ($slotName === 'bar') {
-            return [
-                'props' => [
-                    'id'    => $this->props['id'],
-                    'class' => $this->props['barClass'],
-                ],
-            ];
-        }
-        return [];
-    }
-
-    protected function registerSelectors(): void
-    {
-        FluxRenderer::registerSelector('progress', $this->props['id']);
     }
 }
