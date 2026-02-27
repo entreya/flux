@@ -10,12 +10,10 @@ use Entreya\Flux\Ui\FluxRenderer;
 /**
  * Log panel component — step accordions and log lines container.
  *
- * Slots: stepsContainer
+ * Slots: beforeSteps, stepsContainer, afterSteps
  *
- * Special props:
+ * Props:
  *   jobHeaderTemplate — custom HTML template for JS-rendered job headers
- *   beforeSteps       — HTML before steps
- *   afterSteps        — HTML after steps
  */
 class LogPanel extends FluxComponent
 {
@@ -38,37 +36,38 @@ class LogPanel extends FluxComponent
             'id'                => 'fx-log-panel',
             'class'             => 'flex-grow-1 overflow-auto',
             'jobHeaderTemplate' => '',
-            'beforeSteps'       => '',
-            'afterSteps'        => '',
         ];
     }
 
     protected function slots(): array
     {
         return [
+            'beforeSteps'    => EmptySlot::class,
             'stepsContainer' => StepsContainer::class,
+            'afterSteps'     => EmptySlot::class,
         ];
-    }
-
-    protected function rawProps(): array
-    {
-        return ['beforeSteps', 'afterSteps', 'jobHeaderTemplate'];
     }
 
     protected function template(): string
     {
-        return '<div id="{id}" class="{class}">{beforeSteps}{slot:stepsContainer}{afterSteps}</div>';
+        return '<div id="{id}" class="{class}">{slot:beforeSteps}{slot:stepsContainer}{slot:afterSteps}</div>';
     }
 
-    protected function registerSelectors(): void
+    /**
+     * Register JS templates and config via the standard asset lifecycle.
+     */
+    protected function registerAssets(): void
     {
+        parent::registerAssets();
+
         FluxRenderer::registerTemplate('step', self::STEP_TEMPLATE);
         FluxRenderer::registerPluginOptions('logPanel', [
             'collapseMethod' => 'details',
         ]);
 
-        if ($this->props['jobHeaderTemplate']) {
-            FluxRenderer::registerTemplate('jobHeader', $this->props['jobHeaderTemplate']);
+        $jobHeader = $this->props['jobHeaderTemplate'] ?? '';
+        if ($jobHeader !== '') {
+            FluxRenderer::registerTemplate('jobHeader', $jobHeader);
         }
     }
 

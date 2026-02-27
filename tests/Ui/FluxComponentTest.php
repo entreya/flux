@@ -334,7 +334,7 @@ class FluxComponentTest extends TestCase
     public function testLogPanelBeforeAfterSteps(): void
     {
         $html = LogPanel::render([
-            'props' => [
+            'slots' => [
                 'beforeSteps' => '<div class="before">Before</div>',
                 'afterSteps'  => '<div class="after">After</div>',
             ],
