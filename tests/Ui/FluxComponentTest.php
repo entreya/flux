@@ -343,12 +343,18 @@ class FluxComponentTest extends TestCase
         $this->assertStringContainsString('<div class="after">After</div>', $html);
     }
 
-    public function testLogPanelRegistersStepTemplate(): void
+    public function testLogPanelRegistersStyle(): void
     {
         LogPanel::render();
-        $templates = FluxRenderer::getTemplates();
-        $this->assertArrayHasKey('step', $templates);
-        $this->assertStringContainsString('{name}', $templates['step']);
+        $styles = FluxRenderer::getStyles();
+        $found = false;
+        foreach ($styles as $css) {
+            if (str_contains($css, 'flux-step')) {
+                $found = true;
+                break;
+            }
+        }
+        $this->assertTrue($found, 'LogPanel CSS should be registered');
     }
 
     public function testProgressRendersBar(): void
