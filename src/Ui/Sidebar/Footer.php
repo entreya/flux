@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Entreya\Flux\Ui\Sidebar;
 
 use Entreya\Flux\Ui\FluxComponent;
+use Entreya\Flux\Ui\FluxRenderer;
 
 class Footer extends FluxComponent
 {
@@ -12,44 +13,36 @@ class Footer extends FluxComponent
     {
         return [
             'id'           => 'fx-sidebar-footer',
-            'class'        => 'border-top small p-2',
-            'workflowName' => '',
+            'class'        => 'p-3 border-top small text-secondary',
+            'workflowName' => 'Unknown',
             'trigger'      => 'manual',
-            'phpVersion'   => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION,
+            'runner'       => 'Local',
         ];
     }
 
     protected function template(): string
     {
-        $html = '<div id="{id}" class="{class}">';
-
-        // Workflow row only if name is set — handled in buildContent override
-        $html .= '{slot:workflowRow}';
-        $html .= '<div class="d-flex justify-content-between px-1 py-1">'
-               . '<span class="text-body-secondary">Trigger</span>'
-               . '<span class="text-body-emphasis font-monospace">{trigger}</span>'
-               . '</div>';
-        $html .= '<div class="d-flex justify-content-between px-1 py-1">'
-               . '<span class="text-body-secondary">Runner</span>'
-               . '<span class="text-body-emphasis font-monospace">php-{phpVersion}</span>'
-               . '</div>';
-        $html .= '</div>';
-
-        return $html;
+        return <<<'HTML'
+        <div id="{id}" class="{class}">
+            <div class="mb-1 text-uppercase font-weight-bold" style="font-size:10px;opacity:.6">System Context</div>
+            <div class="d-flex justify-content-between mb-1">
+                <span>Workflow</span>
+                <span class="text-body fw-medium">{workflowName}</span>
+            </div>
+            <div class="d-flex justify-content-between mb-1">
+                <span>Trigger</span>
+                <span class="text-body fw-medium capitalize">{trigger}</span>
+            </div>
+            <div class="d-flex justify-content-between">
+                <span>Runner</span>
+                <span class="text-body fw-medium">{runner}</span>
+            </div>
+        </div>
+        HTML;
     }
 
-    protected function resolveSlots(): array
+    protected function registerSelectors(): void
     {
-        $wf = $this->props['workflowName'] ?? '';
-        $row = '';
-        if ($wf !== '') {
-            $row = '<div class="d-flex justify-content-between px-1 py-1">'
-                 . '<span class="text-body-secondary">Workflow</span>'
-                 . '<span class="text-body-emphasis font-monospace text-truncate" style="max-width:140px">'
-                 . htmlspecialchars($wf, ENT_QUOTES) . '</span>'
-                 . '</div>';
-        }
-
-        return ['workflowRow' => $row];
+        FluxRenderer::registerSelector('sidebarFooter', (string) $this->props['id']);
     }
 }

@@ -12,19 +12,20 @@ class ThemeButton extends FluxComponent
     protected function defaults(): array
     {
         return [
-            'id'      => 'fx-toolbar-theme-btn',
-            'class'   => 'btn btn-outline-secondary btn-sm',
-            'icon_id' => 'fx-toolbar-theme-icon',
+            'id'    => 'fx-toolbar-theme-btn',
+            'class' => 'btn btn-outline-secondary',
+            'title' => 'Toggle Dark Mode',
+            'icon'  => 'bi bi-moon-stars',
         ];
     }
 
     protected function template(): string
     {
-        return '<button id="{id}" class="{class}" onclick="FluxUI.toggleTheme()" title="Toggle theme"><i id="{icon_id}" class="bi bi-moon-stars"></i></button>';
+        return '<button type="button" id="{id}" class="{class}" title="{title}"><i class="{icon}"></i></button>';
     }
 
     protected function registerSelectors(): void
     {
-        FluxRenderer::registerSelector('themeIcon', $this->props['icon_id']);
+        FluxRenderer::registerSelector('themeBtn', (string) $this->props['id']);
     }
 }

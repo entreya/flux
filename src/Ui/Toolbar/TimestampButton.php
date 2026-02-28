@@ -13,18 +13,19 @@ class TimestampButton extends FluxComponent
     {
         return [
             'id'    => 'fx-toolbar-ts-btn',
-            'class' => 'btn btn-outline-secondary btn-sm',
-            'title' => 'Toggle timestamps',
+            'class' => 'btn btn-outline-secondary',
+            'title' => 'Toggle Timestamps',
+            'icon'  => 'bi bi-clock',
         ];
     }
 
     protected function template(): string
     {
-        return '<button id="{id}" class="{class}" onclick="FluxUI.toggleTimestamps()" title="{title}"><i class="bi bi-clock"></i></button>';
+        return '<button type="button" id="{id}" class="{class}" title="{title}"><i class="{icon}"></i></button>';
     }
 
     protected function registerSelectors(): void
     {
-        FluxRenderer::registerSelector('tsBtn', $this->props['id']);
+        FluxRenderer::registerSelector('tsBtn', (string) $this->props['id']);
     }
 }

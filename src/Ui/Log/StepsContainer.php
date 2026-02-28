@@ -13,7 +13,7 @@ class StepsContainer extends FluxComponent
     {
         return [
             'id'    => 'fx-steps',
-            'class' => '',
+            'class' => 'flux-steps',
         ];
     }
 
@@ -25,6 +25,6 @@ class StepsContainer extends FluxComponent
 
     protected function registerSelectors(): void
     {
-        FluxRenderer::registerSelector('steps', $this->props['id']);
+        FluxRenderer::registerSelector('steps', (string) $this->props['id']);
     }
 }

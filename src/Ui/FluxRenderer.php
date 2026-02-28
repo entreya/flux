@@ -109,7 +109,7 @@ class FluxRenderer
      */
     public static function css(): string
     {
-        $path = self::$assetPath ? self::$assetPath . '/css/flux.css' : 'flux.css';
+        $path = self::$assetPath !== '' ? self::$assetPath . '/css/flux.css' : 'flux.css';
         return '<link rel="stylesheet" href="' . htmlspecialchars($path, ENT_QUOTES) . '">';
     }
 
@@ -118,7 +118,7 @@ class FluxRenderer
      */
     public static function js(): string
     {
-        $path = self::$assetPath ? self::$assetPath . '/js/flux.js' : 'flux.js';
+        $path = self::$assetPath !== '' ? self::$assetPath . '/js/flux.js' : 'flux.js';
         return '<script src="' . htmlspecialchars($path, ENT_QUOTES) . '"></script>';
     }
 
@@ -142,35 +142,35 @@ class FluxRenderer
      * This is the JS "bundler" — only scripts from actually rendered
      * components appear. Un-rendered components contribute nothing.
      *
-     * @param array $initConfig Config passed to FluxUI.init() (sseUrl, etc.)
+     * @param array<string, mixed> $initConfig Config passed to FluxUI.init() (sseUrl, etc.)
      */
     public static function init(array $initConfig = []): string
     {
         $cfg = $initConfig;
 
         // Merge selectors (flux.js reads cfg.sel)
-        if (self::$selectors) {
+        if (self::$selectors !== []) {
             $cfg['sel'] = self::$selectors;
         }
 
         // Merge templates
-        if (self::$templates) {
+        if (self::$templates !== []) {
             $cfg['templates'] = self::$templates;
         }
 
         // Merge plugin options (flux.js reads cfg.plugins.*)
-        if (self::$pluginOptions) {
+        if (self::$pluginOptions !== []) {
             $cfg['plugins'] = self::$pluginOptions;
         }
 
         // Merge events
-        if (self::$events) {
-            $eventObj = '{';
+        $eventObj = '';
+        if (self::$events !== []) {
             $pairs = [];
             foreach (self::$events as $event => $handler) {
-                $pairs[] = json_encode($event) . ':' . $handler;
+                $pairs[] = json_encode($event, JSON_THROW_ON_ERROR) . ':' . $handler;
             }
-            $eventObj .= implode(',', $pairs) . '}';
+            $eventObj = '{' . implode(',', $pairs) . '}';
         }
 
         // Build script
@@ -183,11 +183,11 @@ class FluxRenderer
         }
 
         // FluxUI.init()
-        if (!empty($cfg) || !empty(self::$events)) {
-            $jsonCfg = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($cfg !== [] || self::$events !== []) {
+            $jsonCfg = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
             // Inject events object into config (it contains raw JS functions, can't be JSON)
-            if (!empty(self::$events)) {
+            if (self::$events !== []) {
                 $jsonCfg = rtrim($jsonCfg, '}');
                 if ($jsonCfg !== '{') {
                     $jsonCfg .= ',';
@@ -206,6 +206,8 @@ class FluxRenderer
 
     /**
      * Convenience: render styles() + js() + init() in one call.
+     *
+     * @param array<string, mixed> $initConfig
      */
     public static function flush(array $initConfig = []): string
     {

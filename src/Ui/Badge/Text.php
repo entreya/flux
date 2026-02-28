@@ -24,6 +24,6 @@ class Text extends FluxComponent
 
     protected function registerSelectors(): void
     {
-        FluxRenderer::registerSelector('badgeText', $this->props['id']);
+        FluxRenderer::registerSelector('badgeText', (string) $this->props['id']);
     }
 }

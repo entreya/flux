@@ -13,18 +13,19 @@ class Heading extends FluxComponent
     {
         return [
             'id'    => 'fx-toolbar-heading',
-            'class' => 'fw-semibold small flex-grow-1 text-truncate',
-            'text'  => 'Initializing…',
+            'class' => 'h6 mb-0 text-truncate font-weight-bold',
+            'icon'  => 'bi bi-gear-wide-connected',
+            'text'  => 'Initializing...',
         ];
     }
 
     protected function template(): string
     {
-        return '<span id="{id}" class="{class}">{text}</span>';
+        return '<div id="{id}" class="{class}"><i class="{icon} me-1"></i>{text}</div>';
     }
 
     protected function registerSelectors(): void
     {
-        FluxRenderer::registerSelector('jobHeading', $this->props['id']);
+        FluxRenderer::registerSelector('jobHeading', (string) $this->props['id']);
     }
 }

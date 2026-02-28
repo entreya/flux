@@ -22,13 +22,15 @@ const FluxUI = (() => {
     badge: 'fx-badge',
     badgeText: 'fx-badge-text',
     jobList: 'fx-job-list',
+    jobHeading: 'fx-job-heading',
     steps: 'fx-steps',
     progress: 'fx-progress',
     search: 'fx-search',
-    rerunBtn: 'fx-rerun-btn',
-    themeIcon: 'fx-theme-icon',
-    tsBtn: 'fx-ts-btn',
-    jobHeading: 'fx-job-heading',
+    tsBtn: 'fx-toolbar-ts-btn',
+    themeBtn: 'fx-toolbar-theme-btn',
+    expandBtn: 'fx-toolbar-expand-btn',
+    collapseBtn: 'fx-toolbar-collapse-btn',
+    rerunBtn: 'fx-toolbar-rerun-btn',
     dropzone: 'fx-dropzone',
     fileInput: 'fx-file-input',
   };
@@ -53,12 +55,21 @@ const FluxUI = (() => {
     + '<small class="text-body-secondary font-monospace" id="{dur_id}"></small>'
     + '</div>';
 
+  const DEFAULT_JOB_ITEM_TPL =
+    '<li class="list-group-item list-group-item-action d-flex align-items-center gap-2 py-2"'
+    + ' id="{id}" data-flux-job="{job}" data-status="{status}" style="cursor:pointer">'
+    + '<span class="flux-job-icon is-{status}" id="{icon_id}">{icon_char}</span>'
+    + '<span class="flex-grow-1 text-truncate fw-medium small">{name}</span>'
+    + '<small class="text-body-secondary font-monospace" id="{meta_id}">…</small>'
+    + '</li>';
+
   // ── State ────────────────────────────────────────────────────────────────
   let es = null;
   let cfg = {};
   let sel = {};               // merged selector map
   let stepTpl = '';           // step HTML template
   let jobHeaderTpl = '';      // job header HTML template
+  let jobItemTpl = '';        // sidebar job item template
   let collapseMethod = 'details'; // 'details' or 'accordion'
   let hooks = {};             // custom event hooks
   let lineIdx = {};           // { "jobId-stepKey": lineNumber }
@@ -316,17 +327,19 @@ const FluxUI = (() => {
     const itemId = pfx('job-item', id);
     if ($(itemId)) return;
 
-    const item = el('a', 'list-group-item list-group-item-action d-flex align-items-center gap-2 py-2', {
-      id: itemId,
-      href: '#',
-      'data-flux-job': id,
-      'data-status': status,
-    });
-    item.innerHTML = `
-      <span class="flux-job-icon is-${status}" id="${pfx('job-icon', id)}">${JOB_ICON_CHARS[status] || ''}</span>
-      <span class="flex-grow-1 text-truncate fw-medium small">${esc(name)}</span>
-      <small class="text-body-secondary font-monospace" id="${pfx('job-meta', id)}">…</small>
-    `;
+    // Build from configurable template
+    const html = jobItemTpl
+      .replace(/\{id\}/g, itemId)
+      .replace(/\{job\}/g, esc(id))
+      .replace(/\{name\}/g, esc(name))
+      .replace(/\{status\}/g, status)
+      .replace(/\{icon_id\}/g, pfx('job-icon', id))
+      .replace(/\{icon_char\}/g, JOB_ICON_CHARS[status] || '')
+      .replace(/\{meta_id\}/g, pfx('job-meta', id));
+
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html.trim();
+    const item = tmp.firstElementChild;
     item.addEventListener('click', e => { e.preventDefault(); scrollToJob(id); });
     list.appendChild(item);
   }
@@ -338,15 +351,14 @@ const FluxUI = (() => {
       item.classList.remove('active');
     }
 
-    const icon = $(pfx('job-icon', id));
-    if (icon) {
-      icon.className = `flux-job-icon is-${status}`;
-      icon.textContent = JOB_ICON_CHARS[status] || '';
-    }
-
     const meta = $(pfx('job-meta', id));
-    if (meta && elapsed) meta.textContent = elapsed;
-    else if (meta && status === 'skipped') meta.textContent = 'skipped';
+    if (meta) {
+      // Update badge color based on status
+      meta.className = 'badge badge-pill badge-'
+        + (status === 'success' ? 'success' : status === 'failure' ? 'danger' : 'primary');
+      if (elapsed) meta.textContent = elapsed;
+      else if (status === 'skipped') meta.textContent = 'skipped';
+    }
   }
 
   // ── Job header in main area ──────────────────────────────────────────────
@@ -644,8 +656,9 @@ const FluxUI = (() => {
   function applyTheme(t) {
     document.documentElement.setAttribute('data-bs-theme', t);
     try { localStorage.setItem('flux-theme', t); } catch { }
-    const icon = $(sel.themeIcon);
-    if (icon) icon.className = 'bi ' + (t === 'dark' ? 'bi-sun' : 'bi-moon-stars');
+    const btn = $(sel.themeBtn);
+    const icon = btn?.querySelector('i');
+    if (icon) icon.className = (t === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars');
   }
 
   function toggleTheme() {
@@ -724,6 +737,7 @@ const FluxUI = (() => {
     // Templates from PHP or default
     stepTpl = cfg.templates?.step ?? DEFAULT_STEP_TPL;
     jobHeaderTpl = cfg.templates?.jobHeader ?? DEFAULT_JOB_HEADER_TPL;
+    jobItemTpl = cfg.templates?.jobItem ?? DEFAULT_JOB_ITEM_TPL;
 
     // Plugin options
     const lp = cfg.plugins?.logPanel ?? {};
@@ -749,6 +763,14 @@ const FluxUI = (() => {
     // Wire up interactive elements
     setupSearch();
     setupDropZone();
+
+    // Wire toolbar button handlers via selectors
+    const bind = (key, fn) => { const el = $(sel[key]); if (el) el.addEventListener('click', fn); };
+    bind('tsBtn', toggleTimestamps);
+    bind('themeBtn', toggleTheme);
+    bind('expandBtn', expandAll);
+    bind('collapseBtn', collapseAll);
+    bind('rerunBtn', () => rerun(cfg.sseUrl));
 
     // Connect SSE
     if (cfg.sseUrl) connect(cfg.sseUrl);

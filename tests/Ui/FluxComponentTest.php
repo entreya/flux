@@ -113,11 +113,12 @@ class FluxComponentTest extends TestCase
     {
         $html = Toolbar::render([
             'slots' => [
-                'heading' => fn($parentProps) =>
-                    '<h1>Custom: ' . $parentProps['id'] . '</h1>',
+                // Closure now receives the CHILD component's props (Heading defaults)
+                'heading' => fn($childProps) =>
+                    '<h1>Custom: ' . $childProps['id'] . '</h1>',
             ],
         ]);
-        $this->assertStringContainsString('<h1>Custom: fx-toolbar</h1>', $html);
+        $this->assertStringContainsString('<h1>Custom: fx-toolbar-heading</h1>', $html);
     }
 
     public function testSlotOverrideFalse(): void

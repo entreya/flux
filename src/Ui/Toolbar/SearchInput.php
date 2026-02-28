@@ -13,28 +13,27 @@ class SearchInput extends FluxComponent
     {
         return [
             'id'          => 'fx-toolbar-search',
-            'class'       => 'form-control form-control-sm font-monospace',
-            'placeholder' => 'Search logs…',
+            'class'       => 'form-control form-control-sm',
+            'placeholder' => 'Search logs...',
+            'icon'        => 'bi bi-search',
         ];
     }
 
     protected function template(): string
     {
-        return <<<'HTML'
-        <div class="position-relative">
-            <i class="bi bi-search position-absolute top-50 translate-middle-y text-body-secondary" style="left:8px;font-size:11px;pointer-events:none"></i>
-            <input id="{id}" type="search" class="{class}" style="width:180px;padding-left:26px;font-size:12px" placeholder="{placeholder}" autocomplete="off">
-        </div>
-        HTML;
+        return '<div class="position-relative" style="width:200px">'
+             . '<input type="text" id="{id}" class="{class}" placeholder="{placeholder}">'
+             . '<i class="{icon} position-absolute text-muted" style="right:10px;top:50%;transform:translateY(-50%);font-size:12px"></i>'
+             . '</div>';
     }
 
     protected function script(): string
     {
-        return 'document.getElementById("{id}").addEventListener("input",FluxUI.debounce(function(e){FluxUI.filter(e.target.value)},200));';
+        return '// Search input {id} ready';
     }
 
     protected function registerSelectors(): void
     {
-        FluxRenderer::registerSelector('search', $this->props['id']);
+        FluxRenderer::registerSelector('search', (string) $this->props['id']);
     }
 }

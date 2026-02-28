@@ -188,9 +188,21 @@ abstract class FluxComponent
                 continue;
             }
 
-            // Closure: custom rendering
+            // Closure: custom rendering with child's resolved props
             if ($override instanceof \Closure) {
-                $result = $override($this->props);
+                // Instantiate the default child to get its props and register selectors
+                /** @var FluxComponent $child */
+                $child = new $defaultClass();
+                $childCfg = $this->childConfig($name);
+                $childProps = array_merge($child->defaults(), $childCfg['props'] ?? []);
+                $child->configure(['props' => $childProps]);
+
+                // Register the child's selectors so JS can find the custom HTML
+                if (isset($childProps['id'])) {
+                    $child->registerSelectors();
+                }
+
+                $result = $override($childProps);
                 $resolved[$name] = is_string($result) ? $result : '';
                 continue;
             }

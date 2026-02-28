@@ -11,7 +11,6 @@ class Dot extends FluxComponent
     protected function defaults(): array
     {
         return [
-            'id'    => 'fx-badge-dot',
             'class' => 'flux-badge-dot',
         ];
     }

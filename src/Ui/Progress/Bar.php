@@ -11,7 +11,7 @@ class Bar extends FluxComponent
     protected function defaults(): array
     {
         return [
-            'id'    => 'fx-progress',
+            'id'    => 'fx-progress-bar',
             'class' => 'progress-bar bg-primary',
         ];
     }
