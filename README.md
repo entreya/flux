@@ -345,7 +345,7 @@ Override any component's child slots without subclassing:
 ]) ?>
 ```
 
-See [Widget API Reference](docs/WIDGET_API.md) for the complete documentation.
+See [API Reference](docs/README.md) for the complete documentation.
 
 ---
 
@@ -657,9 +657,7 @@ es.addEventListener('workflow_complete', () => es.close());
 
 ## Documentation
 
-- [**Widget API Reference**](docs/WIDGET_API.md) — Complete reference for every widget, config option, slot, method, and selector.
-- [**Yii2 Integration Recipe**](docs/YII2_INTEGRATION.md) — Controller, View, and Background implementation guide.
-- **Laravel / Symfony**: Similar principles apply — use SSE headers and disable output buffering.
+- [**API Reference**](docs/README.md) -- Complete reference for every module, component, channel, and config option.
 
 ## License
 

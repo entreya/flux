@@ -15,12 +15,13 @@ class ThemeButton extends FluxComponent
             'id'    => 'fx-toolbar-theme-btn',
             'class' => 'btn btn-outline-secondary btn-sm',
             'title' => 'Toggle Dark Mode',
+            'icon'  => 'bi bi-moon-stars',
         ];
     }
 
     protected function template(): string
     {
-        return '<button type="button" id="{id}" class="{class}" title="{title}">{title}</button>';
+        return '<button type="button" id="{id}" class="{class}" title="{title}"><i class="{icon}"></i></button>';
     }
 
     protected function registerSelectors(): void
