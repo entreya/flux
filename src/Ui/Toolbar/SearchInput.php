@@ -15,16 +15,12 @@ class SearchInput extends FluxComponent
             'id'          => 'fx-toolbar-search',
             'class'       => 'form-control form-control-sm',
             'placeholder' => 'Search logs...',
-            'icon'        => 'bi bi-search',
         ];
     }
 
     protected function template(): string
     {
-        return '<div class="position-relative" style="width:200px">'
-             . '<input type="text" id="{id}" class="{class}" placeholder="{placeholder}">'
-             . '<i class="{icon} position-absolute text-muted" style="right:10px;top:50%;transform:translateY(-50%);font-size:12px"></i>'
-             . '</div>';
+        return '<input type="text" id="{id}" class="{class}" placeholder="{placeholder}" style="width:200px">';
     }
 
     protected function script(): string

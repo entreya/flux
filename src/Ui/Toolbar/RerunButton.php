@@ -13,16 +13,15 @@ class RerunButton extends FluxComponent
     {
         return [
             'id'    => 'fx-toolbar-rerun-btn',
-            'class' => 'btn btn-primary d-flex align-items-center gap-2',
+            'class' => 'btn btn-primary btn-sm',
             'title' => 'Re-run Workflow',
-            'icon'  => 'bi bi-play-fill',
             'text'  => 'Re-run',
         ];
     }
 
     protected function template(): string
     {
-        return '<button type="button" id="{id}" class="{class}" title="{title}"><i class="{icon}"></i><span>{text}</span></button>';
+        return '<button type="button" id="{id}" class="{class}" title="{title}">{text}</button>';
     }
 
     protected function registerSelectors(): void

@@ -13,15 +13,14 @@ class TimestampButton extends FluxComponent
     {
         return [
             'id'    => 'fx-toolbar-ts-btn',
-            'class' => 'btn btn-outline-secondary',
-            'title' => 'Toggle Timestamps',
-            'icon'  => 'bi bi-clock',
+            'class' => 'btn btn-outline-secondary btn-sm',
+            'title' => 'Timestamps',
         ];
     }
 
     protected function template(): string
     {
-        return '<button type="button" id="{id}" class="{class}" title="{title}"><i class="{icon}"></i></button>';
+        return '<button type="button" id="{id}" class="{class}" title="{title}">{title}</button>';
     }
 
     protected function registerSelectors(): void

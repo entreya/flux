@@ -13,15 +13,14 @@ class ExpandButton extends FluxComponent
     {
         return [
             'id'    => 'fx-toolbar-expand-btn',
-            'class' => 'btn btn-outline-secondary',
+            'class' => 'btn btn-outline-secondary btn-sm',
             'title' => 'Expand All',
-            'icon'  => 'bi bi-chevron-bar-down',
         ];
     }
 
     protected function template(): string
     {
-        return '<button type="button" id="{id}" class="{class}" title="{title}"><i class="{icon}"></i></button>';
+        return '<button type="button" id="{id}" class="{class}" title="{title}">{title}</button>';
     }
 
     protected function registerSelectors(): void

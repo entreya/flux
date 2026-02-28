@@ -14,14 +14,13 @@ class Heading extends FluxComponent
         return [
             'id'    => 'fx-toolbar-heading',
             'class' => 'h6 mb-0 text-truncate font-weight-bold',
-            'icon'  => 'bi bi-gear-wide-connected',
             'text'  => 'Initializing...',
         ];
     }
 
     protected function template(): string
     {
-        return '<div id="{id}" class="{class}"><i class="{icon} me-1"></i>{text}</div>';
+        return '<div id="{id}" class="{class}">{text}</div>';
     }
 
     protected function registerSelectors(): void
