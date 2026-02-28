@@ -2,9 +2,6 @@
 
 > Real-time workflow streaming for PHP. Run YAML-defined pipelines and stream live console output to the browser — GitHub Actions style.
 
-![PHP](https://img.shields.io/badge/PHP-8.1+-777BB4?logo=php&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-green)
-
 ---
 
 ## Installation
@@ -240,7 +237,7 @@ echo Ansi::green('Success!');
 echo Ansi::bold(Ansi::red('Error!'));
 
 // Clickable terminal links
-echo Ansi::link('https://entreya.com', 'Entreya Website');
+echo Ansi::link('https://example.com', 'Click here');
 ```
 
 ## Security
@@ -666,5 +663,5 @@ es.addEventListener('workflow_complete', () => es.close());
 
 ## License
 
-MIT — [entreya.com](https://entreya.com)
+MIT License
 
