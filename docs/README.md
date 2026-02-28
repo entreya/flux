@@ -385,8 +385,8 @@ $validator = new CommandValidator(
     blocklist: ['rm -rf /', 'DROP TABLE', '> /dev/sda'],
 );
 
-$validator->validate('composer install');    // ✅ passes
-$validator->validate('rm -rf /');            // ❌ throws SecurityException
+$validator->validate('composer install');    // passes
+$validator->validate('rm -rf /');            // throws SecurityException
 ```
 
 > **Hidden APIs:**
@@ -950,8 +950,8 @@ class StatusAlert extends FluxComponent
 
 | Method | Purpose | Required |
 |--------|---------|----------|
-| `defaults()` | Return default props as `['key' => value]` | ✅ Yes |
-| `template()` | Return HTML with `{prop}` and `{slot:name}` tokens | ✅ Yes |
+| `defaults()` | Return default props as `['key' => value]` | Yes |
+| `template()` | Return HTML with `{prop}` and `{slot:name}` tokens | Yes |
 | `slots()` | Return `['slotName' => ComponentClass::class]` | No |
 | `style()` | Return CSS string (deduplicated by class) | No |
 | `script()` | Return JS string (`{prop}` interpolated without escaping) | No |

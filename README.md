@@ -76,7 +76,7 @@ Flux::workflow('Deploy')
 
 ---
 
-## ⚡ Architecture: Inline vs. Background
+## Architecture: Inline vs. Background
 
 This is the most important decision when integrating Flux.
 
@@ -95,7 +95,7 @@ Browser → SSE connection → PHP process → bash command → output → brows
 Flux::fromYaml('deploy.yaml')->stream();
 ```
 
-### Mode 2 — Background + File Channel ✅ Recommended for production tasks
+### Mode 2 — Background + File Channel (Recommended for production)
 
 ```
 HTTP request → start worker → return job ID
@@ -108,10 +108,10 @@ Browser opens SSE → tail the log → stream to browser
 **Use when:** CSV imports, data processing, report generation, any job > 30s, any job that must survive browser closure.
 
 **Key properties:**
-- ✅ Process runs independently of the browser
-- ✅ Browser can close and reconnect — sees full history
-- ✅ Works with any queue system (Laravel Horizon, Beanstalk, etc.)
-- ✅ No special server requirements (just files)
+- Process runs independently of the browser
+- Browser can close and reconnect — sees full history
+- Works with any queue system (Laravel Horizon, Beanstalk, etc.)
+- No special server requirements (just files)
 
 #### In your queue worker / background job:
 
@@ -195,7 +195,7 @@ jobs:
 
 ---
 
-## 🚀 Advanced Features
+## Advanced Features
 
 ### 1. Matrix Strategy
 Run a job multiple times with different variable combinations (e.g., testing against multiple PHP versions).
@@ -563,9 +563,9 @@ Channels transport events from worker to browser. All implement `ChannelInterfac
 | Channel | Use case | Latency | Multi-server |
 |---|---|---|---|
 | `SseChannel` | Inline streaming (same request) | 0ms | N/A |
-| `FileChannel` | Background job, single server | ~200ms | ❌ |
-| `DatabaseChannel` | Background job, per-university DB | ~300ms | ✅ |
-| `RedisChannel` | Background job, real-time | ~1ms | ✅ |
+| `FileChannel` | Background job, single server | ~200ms | No |
+| `DatabaseChannel` | Background job, per-university DB | ~300ms | Yes |
+| `RedisChannel` | Background job, real-time | ~1ms | Yes |
 
 ### FileChannel (default)
 
