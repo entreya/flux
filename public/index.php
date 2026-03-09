@@ -7,12 +7,13 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use Entreya\Flux\Ui\FluxAsset;
-use Entreya\Flux\Ui\FluxBadge;
-use Entreya\Flux\Ui\FluxSidebar;
-use Entreya\Flux\Ui\FluxToolbar;
-use Entreya\Flux\Ui\FluxLogPanel;
-use Entreya\Flux\Ui\FluxProgress;
+use Entreya\Flux\Ui\FluxRenderer;
+use Entreya\Flux\Ui\Badge\Dot as BadgeDot;
+use Entreya\Flux\Ui\Badge\Text as BadgeText;
+use Entreya\Flux\Ui\Sidebar\Sidebar;
+use Entreya\Flux\Ui\Toolbar\Toolbar;
+use Entreya\Flux\Ui\Log\LogPanel;
+use Entreya\Flux\Ui\Progress;
 
 $workflow = isset($_GET['workflow']) ? preg_replace('/[^a-zA-Z0-9\-_]/', '', $_GET['workflow']) : null;
 $jobId    = isset($_GET['job'])      ? preg_replace('/[^a-zA-Z0-9\-_]/', '', $_GET['job'])      : null;
@@ -40,7 +41,8 @@ elseif ($jobId) $pageTitle = 'Job — Flux';
 <title><?= $pageTitle ?></title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<?= FluxAsset::css() ?>
+<?php FluxRenderer::setAssetPath('assets'); ?>
+<?= FluxRenderer::css() ?>
 </head>
 <body>
 
@@ -65,7 +67,8 @@ elseif ($jobId) $pageTitle = 'Job — Flux';
     <!-- Right side -->
     <div class="ms-auto d-flex align-items-center gap-2">
       <?php if ($sseUrl): ?>
-        <?= FluxBadge::widget(['id' => 'fx-badge']) ?>
+        <?= BadgeDot::render(['props' => ['id' => 'fx-badge']]) ?>
+        <?= BadgeText::render(['props' => ['id' => 'fx-badge-text']]) ?>
       <?php endif; ?>
     </div>
 
@@ -78,23 +81,24 @@ elseif ($jobId) $pageTitle = 'Job — Flux';
 <?php if ($sseUrl): ?>
 
   <!-- ─── SIDEBAR ──────────────────────────────────────────────────────── -->
-  <?= FluxSidebar::widget([
-      'id'           => 'fx-sidebar',
-      'workflowName' => $workflow ?? 'job/' . $jobId,
-      'options'      => ['style' => 'width:260px;min-width:260px'],
+  <?= Sidebar::render([
+      'props' => [
+          'id'           => 'fx-sidebar',
+          'workflowName' => $workflow ?? 'job/' . $jobId,
+      ],
   ]) ?>
 
   <!-- ─── MAIN ─────────────────────────────────────────────────────────── -->
   <main class="flex-grow-1 d-flex flex-column overflow-hidden min-vw-0">
 
     <!-- Toolbar -->
-    <?= FluxToolbar::widget(['id' => 'fx-toolbar']) ?>
+    <?= Toolbar::render(['props' => ['id' => 'fx-toolbar']]) ?>
 
     <!-- Progress bar -->
-    <?= FluxProgress::widget(['id' => 'fx-progress']) ?>
+    <?= Progress::render(['props' => ['id' => 'fx-progress']]) ?>
 
     <!-- Steps / Logs -->
-    <?= FluxLogPanel::widget(['id' => 'fx-steps']) ?>
+    <?= LogPanel::render(['props' => ['id' => 'fx-steps']]) ?>
 
   </main>
 
@@ -137,8 +141,8 @@ elseif ($jobId) $pageTitle = 'Job — Flux';
 </div><!-- /.layout -->
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<?= FluxAsset::js() ?>
-<?= FluxAsset::init([
+<?= FluxRenderer::js() ?>
+<?= FluxRenderer::init([
     'sseUrl'    => $sseUrl,
     'uploadUrl' => 'upload.php',
 ]) ?>
