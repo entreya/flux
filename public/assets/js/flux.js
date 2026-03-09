@@ -776,6 +776,6 @@ const FluxUI = (() => {
     if (cfg.sseUrl) connect(cfg.sseUrl);
   }
 
-  return { init, rerun, toggleTheme, toggleTimestamps, expandAll, collapseAll, copyLine };
+  return Object.freeze({ init, rerun, toggleTheme, toggleTimestamps, expandAll, collapseAll, copyLine });
 
 })();

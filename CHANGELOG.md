@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `[FEAT]` `FluxRenderer::inlineCss()` — framework-agnostic CSS bundler, returns flux.css + component styles as raw string
+- `[FEAT]` `FluxRenderer::inlineJs()` — framework-agnostic JS bundler, returns flux.js + scripts + FluxUI.init() as raw string
+- `[SECURITY]` `Object.freeze(FluxUI)` — FluxUI object is now immutable in the browser console
 - `[FEAT]` Configurable `icon` prop on all Toolbar components (Heading, SearchInput, TimestampButton, ThemeButton, ExpandButton, CollapseButton, RerunButton).
 - `[FEAT]` Configurable `jobItemTemplate` prop on `JobList` — sidebar job items are now template-driven (same pattern as `stepTpl` and `jobHeaderTpl`).
 - `[FEAT]` Auto-wiring: `FluxUI.init()` now attaches click handlers to all toolbar buttons automatically via selectors.

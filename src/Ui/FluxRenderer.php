@@ -102,6 +102,116 @@ class FluxRenderer
         self::$assetPath = rtrim($path, '/');
     }
 
+    /**
+     * Default absolute path to the assets directory.
+     * Resolved relative to this file: src/Ui/ → src/ → project root → public/assets/.
+     */
+    private static function defaultAssetDir(): string
+    {
+        return dirname(__DIR__, 2) . '/public/assets';
+    }
+
+    // ── Framework-Agnostic Inline Bundling ──────────────────────────────────
+
+    /**
+     * Return all CSS needed as a single raw string.
+     *
+     * Includes flux.css (the core stylesheet) + all component-registered
+     * styles accumulated during render() calls.
+     *
+     * Usage (any framework):
+     *   Yii2:    $this->registerCss(FluxRenderer::inlineCss());
+     *   Laravel: <style>{!! FluxRenderer::inlineCss() !!}</style>
+     *   PHP:     echo '<style>' . FluxRenderer::inlineCss() . '</style>';
+     *
+     * @param string|null $assetDir Override asset directory (default: auto-resolved)
+     */
+    public static function inlineCss(?string $assetDir = null): string
+    {
+        $dir = $assetDir ?? self::defaultAssetDir();
+        $cssFile = $dir . '/css/flux.css';
+
+        $css = is_readable($cssFile) ? file_get_contents($cssFile) : '';
+
+        // Append component-registered styles
+        if (self::$styles !== []) {
+            $css .= "\n" . implode("\n", self::$styles);
+        }
+
+        return $css;
+    }
+
+    /**
+     * Return all JS needed as a single raw string.
+     *
+     * Includes flux.js (the core library) + component instance scripts +
+     * a DOMContentLoaded wrapper that calls FluxUI.init() with the
+     * accumulated selectors, templates, plugins, and events.
+     *
+     * Usage (any framework):
+     *   Yii2:    $this->registerJs(FluxRenderer::inlineJs(['sseUrl' => $url]), View::POS_END);
+     *   Laravel: <script>{!! FluxRenderer::inlineJs(['sseUrl' => $url]) !!}</script>
+     *   PHP:     echo '<script>' . FluxRenderer::inlineJs(['sseUrl' => $url]) . '</script>';
+     *
+     * @param array<string, mixed> $initConfig Config passed to FluxUI.init() (sseUrl, etc.)
+     * @param string|null          $assetDir   Override asset directory (default: auto-resolved)
+     */
+    public static function inlineJs(array $initConfig = [], ?string $assetDir = null): string
+    {
+        $dir = $assetDir ?? self::defaultAssetDir();
+        $jsFile = $dir . '/js/flux.js';
+
+        $js = is_readable($jsFile) ? file_get_contents($jsFile) : '';
+
+        // Build the DOMContentLoaded init block
+        $initBlock = 'document.addEventListener("DOMContentLoaded",function(){';
+
+        // Component instance scripts
+        foreach (self::$scripts as $script) {
+            $initBlock .= $script . "\n";
+        }
+
+        // Build FluxUI.init() config
+        $cfg = $initConfig;
+        if (self::$selectors !== []) {
+            $cfg['sel'] = self::$selectors;
+        }
+        if (self::$templates !== []) {
+            $cfg['templates'] = self::$templates;
+        }
+        if (self::$pluginOptions !== []) {
+            $cfg['plugins'] = self::$pluginOptions;
+        }
+
+        // Events contain raw JS functions — inject outside of json_encode
+        $eventObj = '';
+        if (self::$events !== []) {
+            $pairs = [];
+            foreach (self::$events as $event => $handler) {
+                $pairs[] = json_encode($event, JSON_THROW_ON_ERROR) . ':' . $handler;
+            }
+            $eventObj = '{' . implode(',', $pairs) . '}';
+        }
+
+        if ($cfg !== [] || self::$events !== []) {
+            $jsonCfg = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+
+            if (self::$events !== []) {
+                $jsonCfg = rtrim($jsonCfg, '}');
+                if ($jsonCfg !== '{') {
+                    $jsonCfg .= ',';
+                }
+                $jsonCfg .= '"events":' . $eventObj . '}';
+            }
+
+            $initBlock .= 'FluxUI.init(' . $jsonCfg . ');';
+        }
+
+        $initBlock .= '});';
+
+        return $js . "\n" . $initBlock;
+    }
+
     // ── Output ──────────────────────────────────────────────────────────────
 
     /**
